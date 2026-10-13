@@ -98,7 +98,7 @@ applyPatchToFile('public/css/theme.css', [
 ]);
 
 // =========================================================================
-// 3. server/sim/damage.js: 区分打条与爆条，判定期望伤害 1.5 倍
+// 3. server/sim/damage.js: 严格规范官方元组，准确分流打条与爆条
 // =========================================================================
 applyPatchToFile('server/sim/damage.js', [
   [
@@ -108,7 +108,10 @@ applyPatchToFile('server/sim/damage.js', [
   [
     `  if (dmg && !dmg.silent && amount >= 0.5) {
     const shown = dmg.type === 'element' ? dmg.element : dmg.type === 'elemental' ? (dmg.element || 'true') : dmg.type;
-    battle._ev(['dmg', target.id, Math.round(amount), shown]);
+    // 'r' is display-only (official red number). Absent on every other hit, so the tuple stays four elements.
+    const ev = ['dmg', target.id, Math.round(amount), shown];
+    if (mark === 'r') ev.push('r');
+    battle._ev(ev);
   }`,
     `  if (dmg && !dmg.silent && amount >= 0.5) {
     let shown = dmg.type;
@@ -117,26 +120,52 @@ applyPatchToFile('server/sim/damage.js', [
     } else if (dmg.type === 'element') {
       shown = \`\${dmg.element}-dmg\`;
     }
-    const expectedXa = (dmg.amount * (dmg.mul || 1));
-    const isCrit = amount >= expectedXa * 1.5;
-    battle._ev(['dmg', target.id, Math.round(amount), shown, isCrit]);
+    const expectedXa = officialExpectedAmount(dmg, dmg.type, target.s, target);
+    const ratioCrit = officialDamageMark(amount, expectedXa) === 'r';
+    const hpCrit = target.maxHp > 0 && amount >= target.maxHp * 0.18;
+
+    const ev = ['dmg', target.id, Math.round(amount), shown];
+    if (mark === 'r' || ratioCrit) ev.push('r');
+    else ev.push('');
+    ev.push(hpCrit ? 'hp' : '');
+    battle._ev(ev);
   }`
   ]
 ]);
 
 // =========================================================================
-// 4. public/js/render/app.js: 透传 isCrit 事件并支持运行时设置同步
+// 4. public/js/render/app.js: 适配 dmg 事件分发（透传 ratioCrit 与 hpCrit），含 v0.2.6 新增的 ammoCount 设置
 // =========================================================================
 applyPatchToFile('public/js/render/app.js', [
   [
-    "fx.damage(v, amt, e[3], src);",
-    "fx.damage(v, amt, e[3], src, e[4]);"
+    `      case 'dmg': {
+        const v = views.get(e[1]);
+        if (!v) break;
+        const amt = Number(e[2]) || 0;
+        const m = meleePending.get(v.id);
+        let src = null;
+        if (m && now - m.t < 0.35) { src = m.src; meleePending.delete(v.id); fx._slashAt = src.id; }
+        fx.damage(v, amt, e[3], src, e[4]);
+        break;
+      }`,
+    `      case 'dmg': {
+        const v = views.get(e[1]);
+        if (!v) break;
+        const amt = Number(e[2]) || 0;
+        const m = meleePending.get(v.id);
+        let src = null;
+        if (m && now - m.t < 0.35) { src = m.src; meleePending.delete(v.id); fx._slashAt = src.id; }
+        fx.damage(v, amt, e[3], src, e[4], e[5], e[6]);
+        break;
+      }`
   ],
   [
     `    setSettings(s) {
       if (!s || typeof s !== 'object') return;
       const q = settings.quality;
       if (typeof s.damageNumbers === 'boolean') settings.damageNumbers = s.damageNumbers;
+      if (typeof s.officialDamageNumbers === 'boolean') settings.officialDamageNumbers = s.officialDamageNumbers;
+      if (typeof s.ammoCount === 'boolean') settings.ammoCount = s.ammoCount;   // the units read it every frame (ctx.settings)
       if (s.quality === 'high' || s.quality === 'medium' || s.quality === 'low') settings.quality = s.quality;
       if (q !== settings.quality) { board3d?.setQuality?.(settings.quality); resize(); }
     },`,
@@ -144,6 +173,8 @@ applyPatchToFile('public/js/render/app.js', [
       if (!s || typeof s !== 'object') return;
       const q = settings.quality;
       if (typeof s.damageNumbers === 'boolean') settings.damageNumbers = s.damageNumbers;
+      if (typeof s.officialDamageNumbers === 'boolean') settings.officialDamageNumbers = s.officialDamageNumbers;
+      if (typeof s.ammoCount === 'boolean') settings.ammoCount = s.ammoCount;   // the units read it every frame (ctx.settings)
       if (s.quality === 'high' || s.quality === 'medium' || s.quality === 'low') settings.quality = s.quality;
       if (q !== settings.quality) { board3d?.setQuality?.(settings.quality); resize(); }
       Object.assign(settings, s);
@@ -152,7 +183,7 @@ applyPatchToFile('public/js/render/app.js', [
 ]);
 
 // =========================================================================
-// 5. public/js/render/style.js: 规范全伤害样式键名映射
+// 5. public/js/render/style.js: 兼容 v0.2.5 原生 crit/miss 并扩展 12 项独立外观映射
 // =========================================================================
 applyPatchToFile('public/js/render/style.js', [
   [
@@ -162,14 +193,10 @@ applyPatchToFile('public/js/render/style.js', [
   true: { font: 'sp-dmg-true', fill: ['#ffffff', '#e8e8e8'], stroke: '#2a2a2a' },
   heal: { font: 'sp-dmg-heal', fill: ['#eafff0', '#62f08a'], stroke: '#07361a' },
   elem: { font: 'sp-dmg-elem', fill: ['#fff4e0', '#ff7b3a'], stroke: '#3a1000' },
-});
-
-/** Map b.ev dmg types to a style key. */
-export function dmgStyleKey(type) {
-  if (type === 'phys' || type === 'arts' || type === 'true' || type === 'heal') return type;
-  if (type === 'burn' || type === 'neural' || type === 'necrosis' || type === 'apoptosis' || type === 'erosion' || type === 'element') return 'elem';
-  return 'phys';
-}`,
+  // Official red integer and yellow MISS (PRTS 作战机制 「伤害红字（暴击）」, MISS #ff9000). Default numbers never use these.
+  crit: { font: 'sp-dmg-crit', fill: ['#ffd0d0', '#ff2a2a'], stroke: '#4a0000' },
+  miss: { font: 'sp-dmg-miss', fill: ['#ffe0a8', '#ff9000'], stroke: '#4a2400' },
+});`,
     `export const DMG_STYLE = Object.freeze({
   phys: { font: 'sp-dmg-phys' },
   arts: { font: 'sp-dmg-arts' },
@@ -183,17 +210,26 @@ export function dmgStyleKey(type) {
   neural: { font: 'sp-dmg-neural' },
   apoptosis: { font: 'sp-dmg-apoptosis' },
   erosion: { font: 'sp-dmg-erosion' },
-});
-
+  crit: { font: 'sp-dmg-crit' },
+  miss: { font: 'sp-dmg-miss' },
+});`
+  ],
+  [
+    `/** Map b.ev dmg types to a style key. */
+export function dmgStyleKey(type) {
+  if (type === 'phys' || type === 'arts' || type === 'true' || type === 'heal') return type;
+  if (type === 'burn' || type === 'neural' || type === 'necrosis' || type === 'apoptosis' || type === 'erosion' || type === 'element') return 'elem';
+  return 'phys';
+}`,
+    `/** Map b.ev dmg types to a style key. */
 export function dmgStyleKey(type) {
   if (DMG_STYLE[type]) return type;
   return 'phys';
 }`
   ]
 ]);
-
 // =========================================================================
-// 6. public/js/render/fx/fonts.js: 动态生成 4 大风格（Rodin/Skurri 驱动）
+// 6. public/js/render/fx/fonts.js: 动态生成 4 大风格
 // =========================================================================
 applyPatchToFile('public/js/render/fx/fonts.js', [
   [
@@ -209,7 +245,7 @@ export function ensureDamageFonts() {
         fontFamily: ['Bender', 'Oxanium', 'Rajdhani', 'Arial Black', 'sans-serif'], fontSize: 44, fontWeight: '700',
         fill: st.fill, fillGradientStops: [0.25, 1], stroke: st.stroke, strokeThickness: 7,
         dropShadow: true, dropShadowColor: '#000000', dropShadowAlpha: 0.45, dropShadowDistance: 2, dropShadowBlur: 2,
-      }, { chars: [['0', '9'], '+-×!'], resolution: 2, padding: 6 });
+      }, { chars: st.font === 'sp-dmg-miss' ? [['0', '9'], '+-×!', 'MISS'] : [['0', '9'], '+-×!'], resolution: 2, padding: 6 });
     } catch (err) { console.warn('[fx] bitmap font', st.font, err?.message || err); }
   }
   fontsReady = true;
@@ -230,6 +266,8 @@ export const PRESET_DAMAGE_STYLES = Object.freeze({
     neural: { fill: ['#fff4e0', '#ff7b3a'], stroke: '#3a1000', grad: true, strokeOn: true },
     apoptosis: { fill: ['#fff4e0', '#ff7b3a'], stroke: '#3a1000', grad: true, strokeOn: true },
     erosion: { fill: ['#fff4e0', '#ff7b3a'], stroke: '#3a1000', grad: true, strokeOn: true },
+    crit: { fill: ['#ffd0d0', '#ff2a2a'], stroke: '#4a0000', grad: true, strokeOn: true },
+    miss: { fill: ['#ffe0a8', '#ff9000'], stroke: '#4a2400', grad: true, strokeOn: true },
   },
   official: {
     phys: { fill: '#ffffff', strokeOn: false },
@@ -244,6 +282,8 @@ export const PRESET_DAMAGE_STYLES = Object.freeze({
     neural: { fill: '#267A6D', strokeOn: false },
     apoptosis: { fill: '#393B3B', strokeOn: false },
     erosion: { fill: '#33597A', strokeOn: false },
+    crit: { fill: '#ff2a2a', strokeOn: false },
+    miss: { fill: '#ff9000', strokeOn: false },
   },
   tactical: {
     phys: { fill: '#FFFFFF', strokeOn: true, stroke: '#1f1f1f' },
@@ -258,20 +298,24 @@ export const PRESET_DAMAGE_STYLES = Object.freeze({
     neural: { fill: '#13C2C2', strokeOn: true, stroke: '#002329' },
     apoptosis: { fill: '#722ED1', strokeOn: true, stroke: '#120338' },
     erosion: { fill: '#1890FF', strokeOn: true, stroke: '#002766' },
+    crit: { fill: '#FF4D4F', strokeOn: true, stroke: '#000000' },
+    miss: { fill: '#FAAD14', strokeOn: true, stroke: '#000000' },
   },
   minimal: {
     phys: { fill: ['#FFF1B8', '#FA8C16'], grad: true, strokeOn: true, stroke: '#2b1000' },
     arts: { fill: ['#E6F7FF', '#69C0FF'], grad: true, strokeOn: true, stroke: '#001d66' },
     true: { fill: '#FFF566', strokeOn: true, stroke: '#3f3000' },
     heal: { fill: ['#F6FFED', '#73D13D'], grad: true, strokeOn: true, stroke: '#0b3a00' },
-    'burn-dmg': { fill: '#ffffff', strokeOn: true, stroke: '#D4380D' },
-    'neural-dmg': { fill: '#ffffff', strokeOn: true, stroke: '#08979C' },
-    'apoptosis-dmg': { fill: '#ffffff', strokeOn: true, stroke: '#531DAB' },
-    'erosion-dmg': { fill: '#ffffff', strokeOn: true, stroke: '#096DD9' },
+    'burn-dmg': { fill: '#e6edf3', strokeOn: true, stroke: '#8c4333' },
+    'neural-dmg': { fill: '#e6edf3', strokeOn: true, stroke: '#3b7067' },
+    'apoptosis-dmg': { fill: '#e6edf3', strokeOn: true, stroke: '#484b4b' },
+    'erosion-dmg': { fill: '#e6edf3', strokeOn: true, stroke: '#3a5973' },
     burn: { fill: ['#FFC069', '#D4380D'], grad: true, strokeOn: true, stroke: '#2b0000' },
     neural: { fill: ['#87E8DE', '#08979C'], grad: true, strokeOn: true, stroke: '#001a1c' },
     apoptosis: { fill: ['#B37FEB', '#531DAB'], grad: true, strokeOn: true, stroke: '#0d0024' },
     erosion: { fill: ['#91D5FF', '#096DD9'], grad: true, strokeOn: true, stroke: '#001538' },
+    crit: { fill: '#ff4d4f', strokeOn: false },
+    miss: { fill: '#faad14', strokeOn: false },
   }
 });
 
@@ -286,9 +330,19 @@ export function getCustomDamageConfig() {
   return PRESET_DAMAGE_STYLES.official;
 }
 
-export function rebuildDamageFonts(fontKey = 'novecento') {
+export async function rebuildDamageFonts(fontKey = 'novecento') {
   const P = globalThis.PIXI;
   if (!P) return;
+
+  if (document.fonts?.load) {
+    try {
+      if (fontKey === 'rodin') await document.fonts.load('700 40px FOT-Rodin');
+      else if (fontKey === 'skurri') await document.fonts.load('400 40px Skurri');
+      else if (fontKey === 'novecento') await document.fonts.load('400 40px "Novecento Wide"');
+    } catch (e) {}
+  }
+
+  const cfg = getCustomDamageConfig();
   let mode = 'official';
   let userWeight = '400', userStroke = null, userStop = null;
   try {
@@ -300,7 +354,6 @@ export function rebuildDamageFonts(fontKey = 'novecento') {
   } catch (e) {}
 
   const isOrig = (mode === 'original');
-  const cfg = getCustomDamageConfig();
   const fontFam = (fontKey === 'bender') ? 'Bender, Rajdhani, sans-serif'
     : (fontKey === 'rodin') ? 'FOT-Rodin, sans-serif'
     : (fontKey === 'skurri') ? 'Skurri, sans-serif'
@@ -320,20 +373,21 @@ export function rebuildDamageFonts(fontKey = 'novecento') {
       const strokeThick = userStroke != null ? (item.strokeOn !== false ? userStroke : 0) : defStroke;
       const stopVal = userStop != null ? userStop : (isOrig ? 0.25 : 0.2);
       const gradStops = Array.isArray(fillVal) ? [stopVal, 1] : undefined;
+      const charsConfig = (key === 'miss') ? [['0', '9'], '+-×!', 'MISS'] : [['0', '9'], '+-×!'];
 
       P.BitmapFont.from(fontName, {
         fontFamily: fontFam, fontSize: 44, fontWeight: userWeight, fill: fillVal,
         fillGradientStops: gradStops,
         strokeThickness: strokeThick, stroke: item.stroke || '#000000',
         dropShadow: true, dropShadowColor: '#000000', dropShadowAlpha: isOrig ? 0.45 : 0.6, dropShadowDistance: 2, dropShadowBlur: 2,
-      }, { chars: [['0', '9'], '+-×!'], resolution: 2, padding: 6 });
+      }, { chars: charsConfig, resolution: 2, padding: 6 });
 
       P.BitmapFont.from(fontName + '-crit', {
         fontFamily: fontFam, fontSize: 48, fontWeight: '700', fill: fillVal,
         fillGradientStops: gradStops,
         strokeThickness: strokeThick, stroke: item.stroke || '#000000',
         dropShadow: true, dropShadowColor: '#000000', dropShadowAlpha: 0.7, dropShadowDistance: 2, dropShadowBlur: 2,
-      }, { chars: [['0', '9'], '+-×!'], resolution: 2, padding: 6 });
+      }, { chars: charsConfig, resolution: 2, padding: 6 });
     } catch (e) { /* ignore */ }
   }
 }
@@ -349,7 +403,7 @@ export function ensureDamageFonts() {
 ]);
 
 // =========================================================================
-// 7. public/js/render/fx/numbers.js: 动态读取治疗比例、正上方居中与字号缩放
+// 7. public/js/render/fx/numbers.js: 高度/抖动/重叠/避让/速度滑块全面支持
 // =========================================================================
 applyPatchToFile('public/js/render/fx/numbers.js', [
   [
@@ -368,33 +422,110 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
   return clamp(s / 115, 0.42, 1.05) * baseMult * (big ? 1.35 : 1) * (style === 'heal' ? healRatio : 1);
 };`
   ],
+  // 1. 拦截 dmg 签名与触发条件
   [
-    `  damage(view, amount, type, srcView) {
+    `  damage(view, amount, type, srcView, mark) {
     if (!view) return;
     const style = dmgStyleKey(type);
     const p = this._chest(view);
     const px = p.x, py = p.y, s = p.s;
     const tint = HIT_TINT[style] || 0xffffff;
     const big = view.maxHp > 0 && amount >= view.maxHp * 0.18;`,
-    `  damage(view, amount, type, srcView, isCrit = false) {
+    `  damage(view, amount, type, srcView, mark, hpMark) {
     if (!view) return;
     const style = dmgStyleKey(type);
     const p = this._chest(view);
     const px = p.x, py = p.y, s = p.s;
     const tint = HIT_TINT[style] || 0xffffff;
+
+    const ratioCrit = (mark === 'r');
+    const hpCrit = (hpMark === 'hp') || (view.maxHp > 0 && amount >= view.maxHp * 0.18);
     const cfgMode = this.ctx.settings?.critMode || 'ratio15';
-    const hpCrit = view.maxHp > 0 && amount >= view.maxHp * 0.18;
-    const isTriggeredCrit = cfgMode === 'ratio15' ? isCrit
-      : cfgMode === 'hp18' ? hpCrit
-      : cfgMode === 'both' ? (isCrit || hpCrit)
-      : cfgMode === 'scaleOnly' ? (isCrit || hpCrit)
-      : false;
+    const isCritOn = this.ctx.settings?.critOn !== false;
+    const byRatio = this.ctx.settings?.critByRatio !== false;
+    const byHp = this.ctx.settings?.critByHp !== false;
+
+    const isTriggeredCrit = isCritOn && (
+      (cfgMode === 'ratio15' && ratioCrit) || (cfgMode === 'hp18' && hpCrit) || (cfgMode === 'both' && (ratioCrit || hpCrit)) || (cfgMode === 'scaleOnly' && (ratioCrit || hpCrit))
+    );
     const big = isTriggeredCrit;`
   ],
+  // 2. 官方红字调用
   [
-    "if (this.ctx.settings?.damageNumbers !== false) this.number(view, amount, style, big);",
-    "if (this.ctx.settings?.damageNumbers !== false) this.number(view, amount, style, big, isCrit);"
+    `    // Official mode (设置「官方伤害数字」): only a sim-marked red integer. Sparks and the slash stay.
+    if (this.ctx.settings?.officialDamageNumbers) {
+      if (mark === 'r') this.officialNumber(view, amount, 'crit');
+      return;
+    }
+    this.number(view, amount, style, big);`,
+    `    if (this.ctx.settings?.officialDamageNumbers) {
+      if (mark === 'r') this.officialNumber(view, amount, 'crit');
+      return;
+    }
+    this.number(view, amount, style, big, isTriggeredCrit, ratioCrit, hpCrit);`
   ],
+  // 3. 彻底修复 officialNumber (解决正上方脚底透视与粗体)
+  [
+    `  officialNumber(view, amount, style) {
+    if (!view) return;
+    const miss = style === 'miss';
+    const n = miss ? 0 : Math.round(amount);
+    if (!miss && (!Number.isFinite(n) || n < 0)) return;
+    const now = this.time;
+    const cam = this.ctx.cam();
+    const base = (view.z || 0) + (view.hover || 0) + (view._headTiles || 1.2) * 0.8;
+    const a = cam.project(view.x, view.y, base, this._p);
+    const ax = a.x, ay = a.y, s = a.s > 0 ? a.s : 100;
+    const pxPerZ = ay - cam.project(view.x, view.y, base + 1, this._q).y;
+    const tile = pxPerZ > 1e-3 ? pxPerZ : s;
+    const cx = ax + (Math.random() - 0.5) * OFFICIAL_JITTER_X * tile;
+    const cy = ay - (OFFICIAL_LIFT_MIN + Math.random() * OFFICIAL_LIFT_SPAN) * tile;
+    const sc = numScale(s, false, style);
+    const w = numChars(n, style) * NUM_DIGIT_EM * 24 * sc * NUM_POP + NUM_GAP_PX;
+    const h = 24 * NUM_LINE_EM * sc * NUM_POP;
+    const maxNums = this.load >= 2 ? MAX_NUMBERS >> 1 : MAX_NUMBERS;
+    while (this.nums.length >= maxNums) this._releaseNum(this.nums.shift());
+    const t = this._takeNum(style);
+    t.text.visible = true;
+    t.text.alpha = 1;
+    t.text.text = miss ? 'MISS' : String(n);
+    Object.assign(t, {
+      unit: view, style, value: n, life: 0, end: NUM_LIFE, born: now, lastHit: now, pop: 1, big: false, fading: false,
+      official: true, ox: cx - ax, oy: cy - ay, x0: view.x, y0: view.y, z0: base,
+      risePx: NUM_RISE * tile * 0.5, _x: cx, _y: cy, _w: w, _h: h,
+    });`,
+    `  officialNumber(view, amount, style) {
+    if (!view) return;
+    const miss = style === 'miss';
+    const n = miss ? 0 : Math.round(amount);
+    if (!miss && (!Number.isFinite(n) || n < 0)) return;
+    const now = this.time;
+    const cam = this.ctx.cam();
+    const feetZ = (view.z || 0) + (view.hover || 0);
+    const base = feetZ + (view._headTiles || 1.2);
+    const feet = cam.project(view.x, view.y, feetZ, this._p);
+    const head = cam.project(view.x, view.y, base, this._q);
+    const ax = feet.x, ay = head.y, s = head.s > 0 ? head.s : 100;
+    const pxPerZ = (feet.y - head.y) / (view._headTiles || 1.2);
+    const tile = pxPerZ > 1e-3 ? pxPerZ : s;
+    const cx = feet.x + (Math.random() - 0.5) * OFFICIAL_JITTER_X * tile;
+    const cy = ay - (OFFICIAL_LIFT_MIN + Math.random() * OFFICIAL_LIFT_SPAN) * tile;
+    const sc = numScale(s, false, style);
+    const w = numChars(n, style) * NUM_DIGIT_EM * 24 * sc * NUM_POP + NUM_GAP_PX;
+    const h = 24 * NUM_LINE_EM * sc * NUM_POP;
+    const maxNums = this.load >= 2 ? MAX_NUMBERS >> 1 : MAX_NUMBERS;
+    while (this.nums.length >= maxNums) this._releaseNum(this.nums.shift());
+    const t = this._takeNum(style, true); // 官方红字使用粗体库
+    t.text.visible = true;
+    t.text.alpha = 1;
+    t.text.text = miss ? 'MISS' : String(n);
+    Object.assign(t, {
+      unit: view, style, value: n, life: 0, end: NUM_LIFE, born: now, lastHit: now, pop: 1, big: false, fading: false,
+      official: true, ox: cx - ax, oy: cy - feet.y, x0: view.x, y0: view.y, z0: feetZ,
+      risePx: NUM_RISE * tile * 0.5, _x: cx, _y: cy, _w: w, _h: h,
+    });`
+  ],
+  // 4. 普通跳字的签名与动态高度/抖动/上浮速度
   [
     `  number(view, amount, style, big) {
     const n = Math.round(amount);
@@ -406,7 +537,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const ax = a.x, ay = a.y, s = a.s > 0 ? a.s : 100;
     const pxPerZ = ay - cam.project(view.x, view.y, base + 1, this._q).y;
     const risePx = NUM_RISE * (pxPerZ > 1e-3 ? pxPerZ : s * 0.5);`,
-    `  number(view, amount, style, big, isCrit = false) {
+    `  number(view, amount, style, big, isCrit = false, ratioCrit = false, hpCrit = false) {
     const n = Math.round(amount);
     if (!(n > 0) || !view) return;
     const now = this.time;
@@ -415,15 +546,86 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const base = feetZ + (view._headTiles || 1.2);
     const feet = cam.project(view.x, view.y, feetZ, this._p);
     const head = cam.project(view.x, view.y, base, this._q);
-    const ax = feet.x, ay = head.y, s = head.s > 0 ? head.s : 100;
+    
+    let heightFactor = 1.0, jitterRange = 0.0, riseSpeed = 1.0;
+    try {
+      const pref = JSON.parse(localStorage.getItem('sp.pref.settings'));
+      if (pref?.customHeight != null) heightFactor = Number(pref.customHeight);
+      if (pref?.customJitter != null) jitterRange = Number(pref.customJitter);
+      if (pref?.numRiseSpeed != null) riseSpeed = Number(pref.numRiseSpeed);
+    } catch (e) {}
+
+    const targetY = feet.y + (head.y - feet.y) * heightFactor;
+    const ax = feet.x + (Math.random() - 0.5) * jitterRange * 2;
+    const ay = targetY;
+    const s = head.s > 0 ? head.s : 100;
     const pxPerZ = (feet.y - head.y) / (view._headTiles || 1.2);
-    const risePx = NUM_RISE * (pxPerZ > 1e-3 ? pxPerZ : s * 0.5);`
+    const risePx = (NUM_RISE * riseSpeed) * (pxPerZ > 1e-3 ? pxPerZ : s * 0.5);`
   ],
+  // 5. 控制跳字相加与同屏上限
+  [
+    `    const merge = youngest && now - youngest.lastHit < NUM_MERGE_GAP && youngest.life < NUM_RISE_T * 0.55 ? youngest
+      : (mine >= NUM_PER_TARGET && youngest ? youngest : null);
+    if (merge && this._growFits(merge, n, big)) {
+      merge.value += n;
+      merge.text.text = (style === 'heal' ? '+' : '') + merge.value;
+      merge.pop = 1;
+      merge.big = merge.big || big;
+      merge.lastHit = now;
+      merge.end = Math.min(merge.life + NUM_LIFE * 0.75, Math.max(merge.end, merge.life + NUM_LIFE * 0.6), NUM_MAX_LIFE);
+      this._sizeNum(merge);
+      return;
+    }
+    if (mine >= NUM_PER_TARGET && oldest) this._fadeNum(oldest, 0.1);`,
+    `    const maxPerTarget = Number(this.ctx.settings?.numMaxPerTarget ?? NUM_PER_TARGET);
+    const allowMerge = this.ctx.settings?.numMerge !== false;
+    let merge = youngest && now - youngest.lastHit < NUM_MERGE_GAP && youngest.life < NUM_RISE_T * 0.55 ? youngest
+      : (mine >= maxPerTarget && youngest ? youngest : null);
+    if (!allowMerge) merge = null;
+    
+    if (merge && this._growFits(merge, n, big)) {
+      merge.value += n;
+      merge.text.text = (style === 'heal' ? '+' : '') + merge.value;
+      merge.pop = 1;
+      merge.big = merge.big || big;
+      merge.lastHit = now;
+      merge.end = Math.min(merge.life + NUM_LIFE * 0.75, Math.max(merge.end, merge.life + NUM_LIFE * 0.6), NUM_MAX_LIFE);
+      this._sizeNum(merge);
+      return;
+    }
+    if (mine >= maxPerTarget && oldest) this._fadeNum(oldest, 0.1);`
+  ],
+  // 6. 控制跳字左右车道避让
+  [
+    `    let best = null;
+    for (const k of NUM_LANES) {
+      const cx = ax + k * lane;
+      const cy = this._numSlotPx(cx, ay, w, h, risePx);
+      const lift = ay - cy;
+      if (!best || lift < best.lift - 0.5) best = { cx, cy, lift, k };
+      if (lift <= h * 1.2) break;              // low enough: keep the nearest lane
+    }`,
+    `    const allowAvoid = this.ctx.settings?.numAvoid !== false;
+    let best = null;
+    if (!allowAvoid) {
+      best = { cx: ax, cy: ay, lift: 0, k: 0 };
+    } else {
+      for (const k of NUM_LANES) {
+        const cx = ax + k * lane;
+        const cy = this._numSlotPx(cx, ay, w, h, risePx);
+        const lift = ay - cy;
+        if (!best || lift < best.lift - 0.5) best = { cx, cy, lift, k };
+        if (lift <= h * 1.2) break;              // low enough: keep the nearest lane
+      }
+    }`
+  ],
+  // 7. 取消原生放大（防止与用户设定叠加）
   [
     "const sc = numScale(s, big, style);",
     `    const isOrig = (this.ctx.settings?.presetMode === 'original');
     const sc = numScale(s, big, style) * (isOrig ? 1.0 : (big ? 1.4 : 1.0));`
   ],
+  // 8. 创建文字时正确赋值
   [
     `    const t = this._takeNum(style);
     t.text.visible = true;
@@ -433,14 +635,8 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
       unit: view, style, value: n, life: 0, end: life, born: now, lastHit: now, pop: 1, big: !!big, fading: false,
       ox: cx - ax, oy: cy - ay, x0: view.x, y0: view.y, z0: base, risePx, _x: cx, _y: cy, _w: w, _h: h,
     });`,
-    `    const critOn = this.ctx.settings?.critOn !== false;
-    const byRatio = this.ctx.settings?.critByRatio !== false;
-    const byHp = !!this.ctx.settings?.critByHp;
-    const doBold = this.ctx.settings?.critDoBold !== false;
-    const hpCrit = view.maxHp > 0 && amount >= view.maxHp * 0.18;
-    const isTriggered = critOn && ((byRatio && isCrit) || (byHp && hpCrit));
-    const isBoldCrit = isTriggered && doBold;
-
+    `    const doBold = this.ctx.settings?.critDoBold !== false;
+    const isBoldCrit = isCrit && doBold;
     const t = this._takeNum(style, isBoldCrit);
     t.text.visible = true;
     t.text.alpha = 1;
@@ -450,6 +646,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
       ox: cx - ax, oy: cy - feet.y, x0: view.x, y0: view.y, z0: feetZ, risePx, _x: cx, _y: cy, _w: w, _h: h,
     });`
   ],
+  // 9. _takeNum 增加粗体支持
   [
     `  _takeNum(style) {
     const P = this.P;
@@ -462,7 +659,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
 ]);
 
 // =========================================================================
-// 8. public/js/ui/settings.js: 接入 FOT-Rodin/Skurri 选项、多语言与组件隔离
+// 8. public/js/ui/settings.js
 // =========================================================================
 const damageCustomSectionCode = [
   'const I18N_CUSTOM = {',
@@ -473,17 +670,15 @@ const damageCustomSectionCode = [
   "  '街机硬派': { en: 'Arcade (Skurri)', ja: 'アーケード', ko: '아케이드', 'zh-TW': '街機硬派' },",
   "  '自定义': { en: 'Custom', ja: 'カスタム', ko: '커스텀', 'zh-TW': '自訂' },",
   "  '系统默认': { en: 'System Default', ja: 'システム標準', ko: '시스템 기본', 'zh-TW': '系統預設' },",
-  "  '1.5倍期望': { en: '1.5x Ratio', ja: '期待値1.5倍', ko: '기대치 1.5배', 'zh-TW': '1.5倍期望' },",
-  "  '18%生命': { en: '18% HP', ja: 'HP 18%', ko: 'HP 18%', 'zh-TW': '18%生命' },",
-  "  '字号放大': { en: 'Enlarge', ja: '拡大', ko: '확대', 'zh-TW': '字號放大' },",
-  "  '字体加粗': { en: 'Bold', ja: '太字', ko: '굵게', 'zh-TW': '字型加粗' },",
   "  '高级微调': { en: 'Fine-Tuning', ja: '詳細設定', ko: '고급 설정', 'zh-TW': '進階微調' },",
   "  '展开': { en: 'Expand', ja: '展開', ko: '펼치기', 'zh-TW': '展開' },",
   "  '收起': { en: 'Collapse', ja: '折りたたむ', ko: '접기', 'zh-TW': '收起' },",
-  "  '基础字重': { en: 'Base Weight', ja: '基本太さ', ko: '기본 굵기', 'zh-TW': '基礎字重' },",
-  "  '描边粗细': { en: 'Stroke Width', ja: '縁取り幅', ko: '외곽선 두께', 'zh-TW': '描邊粗細' },",
-  "  '渐变停靠点': { en: 'Gradient Stop', ja: 'グラデ位置', ko: '그라데이션 위치', 'zh-TW': '漸層停靠點' },",
+  "  '本地字体名称': { en: 'Local Font', ja: 'ローカルフォント', ko: '로컬 폰트', 'zh-TW': '本地字體名稱' },",
+  "  '应用字体': { en: 'Apply', ja: '適用', ko: '적용', 'zh-TW': '應用字體' },",
+  "  '伤害跳字字号': { en: 'Damage Scale', ja: '文字サイズ', ko: '폰트 크기', 'zh-TW': '傷害跳字字級' },",
   "  '治疗字号比例': { en: 'Heal Ratio', ja: '回復サイズ比', ko: '치료 크기 비율', 'zh-TW': '治療字級比例' },",
+  "  '跳字垂直高度': { en: 'Damage Height', ja: '跳字の高さ', ko: '데미지 높이', 'zh-TW': '跳字垂直高度' },",
+  "  '跳字左右抖动': { en: 'Damage Jitter', ja: '左右ゆらぎ', ko: '좌우 흔들림', 'zh-TW': '跳字左右抖動' },",
   "  '统一元素为单色': { en: 'Unify Elements', ja: '元素色を統一', ko: '원소 단색 통일', 'zh-TW': '統一元素為單色' },",
   "  '物理伤害': { en: 'Physical', ja: '物理', ko: '물리', 'zh-TW': '物理傷害' },",
   "  '法术伤害': { en: 'Arts', ja: '術師', ko: '마법', 'zh-TW': '法術傷害' },",
@@ -500,6 +695,17 @@ const damageCustomSectionCode = [
   "  '渐变': { en: 'Grad', ja: 'グラデ', ko: '그라데이션', 'zh-TW': '漸層' },",
   "  '描边': { en: 'Stroke', ja: '縁取り', ko: '외곽선', 'zh-TW': '描邊' },",
   "  '主色': { en: 'Main', ja: '主色', ko: '메인', 'zh-TW': '主色' },",
+  "  '跳字上浮速度': { en: 'Rise Speed', ja: '上昇速度', ko: '상승 속도', 'zh-TW': '跳字上浮速度' },",
+  "  '同目标跳字上限': { en: 'Max per Target', ja: '同目標上限', ko: '대상별 상한', 'zh-TW': '同目標跳字上限' },",
+  "  '跳字合并': { en: 'Merge Numbers', ja: '数値統合', ko: '숫자 병합', 'zh-TW': '跳字合併' },",
+  "  '跳字避让': { en: 'Dodge Overlap', ja: '重なり回避', ko: '겹침 회피', 'zh-TW': '跳字避讓' },",
+  "  '暴击大字': { en: 'Crit Pop', ja: 'クリティカル強調', ko: '치명타 강조', 'zh-TW': '暴擊大字' },",
+  "  '暴击触发模式': { en: 'Crit Trigger', ja: 'クリティカル条件', ko: '치명타 조건', 'zh-TW': '暴擊觸發模式' },",
+  "  '官方比例(15%)': { en: 'Ratio 15%', ja: '比率15%', ko: '비율 15%', 'zh-TW': '官方比例(15%)' },",
+  "  '高伤阈值(18%)': { en: 'HP 18%', ja: 'HP18%以上', ko: 'HP 18%', 'zh-TW': '高傷閾值(18%)' },",
+  "  '两者其一': { en: 'Either', ja: 'どちらか', ko: '둘 중 하나', 'zh-TW': '兩者其一' },",
+  "  '仅放大': { en: 'Scale Only', ja: '拡大のみ', ko: '확대만', 'zh-TW': '僅放大' },",
+  "  '暴击加粗': { en: 'Crit Bold', ja: 'クリティカル太字', ko: '치명타 굵게', 'zh-TW': '暴擊加粗' },",
   '};',
   'function tr(text) {',
   "  const lang = document.documentElement.lang || 'zh';",
@@ -510,10 +716,19 @@ const damageCustomSectionCode = [
   '  return text;',
   '}',
   'function DamageCustomSection({ s, updateSettings }) {',
+  '  const tr = (text) => {',
+  "    const lang = document.documentElement.lang || 'zh';",
+  "    if (lang.startsWith('zh-TW') || lang.startsWith('zh-Hant')) return I18N_CUSTOM[text]?.['zh-TW'] || text;",
+  "    if (lang.startsWith('en')) return I18N_CUSTOM[text]?.en || text;",
+  "    if (lang.startsWith('ja')) return I18N_CUSTOM[text]?.ja || text;",
+  "    if (lang.startsWith('ko')) return I18N_CUSTOM[text]?.ko || text;",
+  '    return text;',
+  '  };',
   '  const [open, setOpen] = useState(false);',
   '  const [cfg, setCfg] = useState(() => {',
   "    try { return JSON.parse(localStorage.getItem('sp.pref.damageStyleCustom')) || {}; } catch(e) { return {}; }",
   '  });',
+  '  const [localFontInput, setLocalFontInput] = useState(s.dmgFont || "novecento");',
   '  useLayoutEffect(() => {',
   "    if (s.presetMode && s.presetMode !== 'custom') {",
   '      import("../render/fx/fonts.js").then((m) => {',
@@ -553,11 +768,15 @@ const damageCustomSectionCode = [
   "    ['burn', '灼燃伤害(爆条)'], ['neural', '神经伤害(爆条)'],",
   "    ['apoptosis', '凋亡伤害(爆条)'], ['erosion', '侵蚀伤害(爆条)']",
   '  ];',
-  '  const critOn = s.critOn !== false;',
-  '  const byRatio = s.critByRatio !== false;',
-  '  const byHp = !!s.critByHp;',
-  '  const doScale = s.critDoScale !== false;',
-  '  const doBold = s.critDoBold !== false;',
+  '  const currentScale = Number(s.dmgScale || 1.0);',
+  '  const currentHealRatio = Number(s.customHealRatio ?? 0.65);',
+  '  const currentHeight = Number(s.customHeight ?? 1.0);',
+  '  const currentJitter = Number(s.customJitter ?? 2.0);',
+  '  const currentRise = Number(s.numRiseSpeed ?? 1.0);',
+  '  const currentMaxPer = Math.round(Number(s.numMaxPerTarget ?? 4));',
+  '  const CRIT_MODES = [',
+  "    ['ratio15', '官方比例(15%)'], ['hp18', '高伤阈值(18%)'], ['both', '两者其一'], ['scaleOnly', '仅放大'],",
+  '  ];',
   '  return html`<div style="margin-top:.08rem;">',
   '    <div class="set-row">',
   '      <span class="set-row__label">${tr(\'高级微调\')}<${MicroLabel}>CUSTOMIZE<//></span>',
@@ -567,85 +786,81 @@ const damageCustomSectionCode = [
   '    </div>',
   '    ${open ? html`<div style="display:flex;flex-direction:column;gap:.1rem;padding:.12rem;background:rgba(0,0,0,.45);border:1px solid var(--line-2);margin-top:.06rem;">',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'界面数字字体\')}<${MicroLabel}>UI FONT<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${FONT_OPTIONS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${(s.uiFont || \'novecento\') === id ? \'true\' : \'false\'}',
-  '            class=${(s.uiFont || \'novecento\') === id ? \'is-on\' : \'\'} onClick=${() => updateSettings({ uiFont: id, presetMode: \'custom\' })}>${label}</button>`)}',
+  '        <span class="set-row__label">${tr(\'本地字体名称\')}<${MicroLabel}>LOCAL FONT<//></span>',
+  '        <div style="display:flex;gap:.06rem;align-items:center;flex:1;justify-content:flex-end;">',
+  '          <select style="background:#050706;border:1px solid var(--line-2);color:#fff;font-size:.13rem;padding:2px 4px;" onChange=${(e) => {',
+  '             const val = e.currentTarget.value;',
+  '             if (!val) return;',
+  '             setLocalFontInput(val);',
+  '             updateSettings({ dmgFont: val, uiFont: val, presetMode: \'custom\' });',
+  '             import(\'../render/fx/fonts.js\').then((m) => m.rebuildDamageFonts(val));',
+  '          }}>',
+  '            <option value="">-- 选择常见本地字体 --</option>',
+  '            <option value="Impact">Impact (美式粗窄)</option>',
+  '            <option value="Arial Black">Arial Black (极粗黑体)</option>',
+  '            <option value="Segoe UI">Segoe UI (现代系统)</option>',
+  '            <option value="Verdana">Verdana (宽松无衬线)</option>',
+  '            <option value="Tahoma">Tahoma (精干无衬线)</option>',
+  '            <option value="Consolas">Consolas (等宽终端)</option>',
+  '          </select>',
+  '          <input type="text" value=${localFontInput} onInput=${(e) => setLocalFontInput(e.currentTarget.value)} placeholder="或手输字体名" style="padding:2px 6px;background:#050706;border:1px solid var(--line-2);color:#fff;font-size:.13rem;width:1.3rem;" />',
+  '          <button type="button" class="btn btn--primary btn--sm" onClick=${() => {',
+  '             updateSettings({ dmgFont: localFontInput, uiFont: localFontInput, presetMode: \'custom\' });',
+  '             import(\'../render/fx/fonts.js\').then((m) => m.rebuildDamageFonts(localFontInput));',
+  '          }}>${tr(\'应用\')}</button>',
   '        </div>',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'战斗跳字字体\')}<${MicroLabel}>COMBAT FONT<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${FONT_OPTIONS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${(s.dmgFont || \'novecento\') === id ? \'true\' : \'false\'}',
-  '            class=${(s.dmgFont || \'novecento\') === id ? \'is-on\' : \'\'} onClick=${() => { updateSettings({ dmgFont: id, presetMode: \'custom\' }); import(\'../render/fx/fonts.js\').then((m) => m.rebuildDamageFonts(id)); }}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'伤害跳字字号\')}<${MicroLabel}>SCALE (${Math.round(currentScale * 100)}%)<//></span>',
+  '        <input class="set-range" type="range" min="0.5" max="2.0" step="0.05" value=${currentScale}',
+  '          onInput=${(e) => updateSettings({ dmgScale: String(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'伤害跳字字号\')}<${MicroLabel}>SCALE<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${DMG_SCALES.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${(s.dmgScale || \'1.0\') === id ? \'true\' : \'false\'}',
-  '            class=${(s.dmgScale || \'1.0\') === id ? \'is-on\' : \'\'} onClick=${() => updateSettings({ dmgScale: id, presetMode: \'custom\' })}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'治疗字号比例\')}<${MicroLabel}>HEAL RATIO (${Math.round(currentHealRatio * 100)}%)<//></span>',
+  '        <input class="set-range" type="range" min="0.3" max="1.5" step="0.05" value=${currentHealRatio}',
+  '          onInput=${(e) => updateSettings({ customHealRatio: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'基础字重\')}<${MicroLabel}>WEIGHT<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${WEIGHT_OPTIONS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${(s.customWeight || \'400\') === id ? \'true\' : \'false\'}',
-  '            class=${(s.customWeight || \'400\') === id ? \'is-on\' : \'\'} onClick=${() => { updateSettings({ customWeight: id, presetMode: \'custom\' }); import(\'../render/fx/fonts.js\').then(m => m.rebuildDamageFonts(s.dmgFont)); }}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'跳字垂直高度\')}<${MicroLabel}>HEIGHT (${Math.round(currentHeight * 100)}%)<//></span>',
+  '        <input class="set-range" type="range" min="0.0" max="1.5" step="0.05" value=${currentHeight}',
+  '          onInput=${(e) => updateSettings({ customHeight: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'描边粗细\')}<${MicroLabel}>STROKE<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${STROKE_OPTIONS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${String(s.customStroke ?? \'4\') === id ? \'true\' : \'false\'}',
-  '            class=${String(s.customStroke ?? \'4\') === id ? \'is-on\' : \'\'} onClick=${() => { updateSettings({ customStroke: Number(id), presetMode: \'custom\' }); import(\'../render/fx/fonts.js\').then(m => m.rebuildDamageFonts(s.dmgFont)); }}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'跳字左右抖动\')}<${MicroLabel}>JITTER (${currentJitter}px)<//></span>',
+  '        <input class="set-range" type="range" min="0" max="5" step="0.5" value=${currentJitter}',
+  '          onInput=${(e) => updateSettings({ customJitter: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'渐变停靠点\')}<${MicroLabel}>GRADIENT<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${STOP_OPTIONS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${String(s.customStop ?? \'0.25\') === id ? \'true\' : \'false\'}',
-  '            class=${String(s.customStop ?? \'0.25\') === id ? \'is-on\' : \'\'} onClick=${() => { updateSettings({ customStop: Number(id), presetMode: \'custom\' }); import(\'../render/fx/fonts.js\').then(m => m.rebuildDamageFonts(s.dmgFont)); }}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'跳字上浮速度\')}<${MicroLabel}>RISE (${Math.round(currentRise * 100)}%)<//></span>',
+  '        <input class="set-range" type="range" min="0.2" max="2.5" step="0.1" value=${currentRise}',
+  '          onInput=${(e) => updateSettings({ numRiseSpeed: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'治疗字号比例\')}<${MicroLabel}>HEAL RATIO<//></span>',
-  '        <div class="set-seg" role="radiogroup">',
-  '          ${HEAL_RATIOS.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${String(s.customHealRatio ?? \'0.65\') === id ? \'true\' : \'false\'}',
-  '            class=${String(s.customHealRatio ?? \'0.65\') === id ? \'is-on\' : \'\'} onClick=${() => updateSettings({ customHealRatio: Number(id), presetMode: \'custom\' })}>${label}</button>`)}',
-  '        </div>',
+  '        <span class="set-row__label">${tr(\'同目标跳字上限\')}<${MicroLabel}>MAX/TARGET (${currentMaxPer})<//></span>',
+  '        <input class="set-range" type="range" min="1" max="8" step="1" value=${currentMaxPer}',
+  '          onInput=${(e) => updateSettings({ numMaxPerTarget: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
+  '      <${Toggle} label=${tr(\'跳字合并\')} micro="MERGE" value=${s.numMerge !== false} onChange=${(v) => updateSettings({ numMerge: v, presetMode: \'custom\' })} />',
+  '      <${Toggle} label=${tr(\'跳字避让\')} micro="DODGE" value=${s.numAvoid !== false} onChange=${(v) => updateSettings({ numAvoid: v, presetMode: \'custom\' })} />',
+  '      <${Toggle} label=${tr(\'暴击大字\')} micro="CRIT POP" value=${s.critOn !== false} onChange=${(v) => updateSettings({ critOn: v, presetMode: \'custom\' })} />',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'暴击跳字特显\')}<${MicroLabel}>CRIT MASTER<//></span>',
-  '        <button type="button" class=${`set-toggle${critOn ? \' is-on\' : \'\'}`} role="switch" aria-checked=${critOn ? \'true\' : \'false\'}',
-  '          onClick=${() => updateSettings({ critOn: !critOn, presetMode: \'custom\' })}><i></i><span>${critOn ? tc(\'toggle\', \'开启\') : tc(\'toggle\', \'关闭\')}</span></button>',
+  '        <span class="set-row__label">${tr(\'暴击触发模式\')}<${MicroLabel}>CRIT TRIGGER<//></span>',
+  '        <div class="set-seg" role="radiogroup">',
+  '          ${CRIT_MODES.map(([id, label]) => html`<button key=${id} type="button" role="radio" aria-checked=${(s.critMode || \'ratio15\') === id ? \'true\' : \'false\'}',
+  '            class=${(s.critMode || \'ratio15\') === id ? \'is-on\' : \'\'} onClick=${() => updateSettings({ critMode: id, presetMode: \'custom\' })}>${tr(label)}</button>`)}',
+  '        </div>',
   '      </div>',
-  '      ${critOn ? html`',
-  '        <div class="set-row">',
-  '          <span class="set-row__label">${tr(\'暴击触发条件\')}<${MicroLabel}>TRIGGER (多选)<//></span>',
-  '          <div class="set-seg" role="group">',
-  '            <button type="button" class=${byRatio ? \'is-on\' : \'\'} onClick=${() => { if (byRatio && !byHp) return; updateSettings({ critByRatio: !byRatio, presetMode: \'custom\' }); }}>${tr(\'1.5倍期望\')}</button>',
-  '            <button type="button" class=${byHp ? \'is-on\' : \'\'} onClick=${() => { if (byHp && !byRatio) return; updateSettings({ critByHp: !byHp, presetMode: \'custom\' }); }}>${tr(\'18%生命\')}</button>',
-  '          </div>',
-  '        </div>',
-  '        <div class="set-row">',
-  '          <span class="set-row__label">${tr(\'暴击视觉表现\')}<${MicroLabel}>VISUAL (多选)<//></span>',
-  '          <div class="set-seg" role="group">',
-  '            <button type="button" class=${doScale ? \'is-on\' : \'\'} onClick=${() => { if (doScale && !doBold) return; updateSettings({ critDoScale: !doScale, presetMode: \'custom\' }); }}>${tr(\'字号放大\')}</button>',
-  '            <button type="button" class=${doBold ? \'is-on\' : \'\'} onClick=${() => { if (doBold && !doScale) return; updateSettings({ critDoBold: !doBold, presetMode: \'custom\' }); }}>${tr(\'字体加粗\')}</button>',
-  '          </div>',
-  '        </div>',
-  '      ` : null}',
+  '      <${Toggle} label=${tr(\'暴击加粗\')} micro="CRIT BOLD" value=${s.critDoBold !== false} onChange=${(v) => updateSettings({ critDoBold: v, presetMode: \'custom\' })} />',
   '      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.04rem;border-bottom:1px solid var(--line-2);padding-bottom:.06rem;">',
   '        <span style="font-size:.13rem;color:var(--text-dim);">${tr(\'各伤害独立外观\')}：</span>',
   '        <button type="button" class="btn btn--secondary btn--sm" onClick=${unifyElements}>${tr(\'统一元素为单色\')}</button>',
   '      </div>',
   '      ${items.map(([k, name]) => {',
-  '        const cur = cfg[k] || PALETTE_PRESETS.official[k] || {};',
+  '        const cur = cfg[k] || {};',
   "        const fill = Array.isArray(cur.fill) ? cur.fill[0] : (cur.fill || '#ffffff');",
   "        const fill2 = Array.isArray(cur.fill) ? cur.fill[1] : (cur.fill2 || fill);",
   '        const grad = !!cur.grad;',
-  '        const strokeOn = cur.strokeOn !== undefined ? !!cur.strokeOn : true;',
+  '        const strokeOn = !!cur.strokeOn;',
   "        const stroke = cur.stroke || '#000000';",
   '        return html`<div key=${k} style="display:flex;align-items:center;justify-content:space-between;font-size:.13rem;border-bottom:1px dashed var(--line);padding-bottom:.04rem;">',
   '          <span style="width:1.25rem;font-weight:700;">${tr(name)}</span>',
@@ -698,15 +913,6 @@ export const settingsStore = createStore({
   uiFont: _rawPref.uiFont || _rawPref.fontFamily || 'novecento',
   dmgFont: _rawPref.dmgFont || _rawPref.fontFamily || 'novecento',
   dmgScale: _rawPref.dmgScale || '1.0',
-  critOn: _rawPref.critOn !== false,
-  critByRatio: _rawPref.critByRatio !== false,
-  critByHp: !!_rawPref.critByHp,
-  critDoScale: _rawPref.critDoScale !== false,
-  critDoBold: _rawPref.critDoBold !== false,
-  customWeight: _rawPref.customWeight || '400',
-  customStroke: _rawPref.customStroke != null ? _rawPref.customStroke : 4,
-  customStop: _rawPref.customStop != null ? _rawPref.customStop : 0.25,
-  customHealRatio: _rawPref.customHealRatio != null ? _rawPref.customHealRatio : 0.65,
 });`
   ],
   [
@@ -807,22 +1013,24 @@ const HEAL_RATIOS = [
 
 function applyPresetMode(id, updateFn) {
   const presets = {
-    original: { uiFont: 'bender', dmgFont: 'bender', dmgScale: '1.0', customWeight: '700', customStroke: 7, customStop: 0.25, customHealRatio: 0.9, critOn: true, critByRatio: false, critByHp: true, critDoScale: true, critDoBold: false },
-    official: { uiFont: 'novecento', dmgFont: 'novecento', dmgScale: '1.0', customWeight: '400', customStroke: 0, customStop: 0, customHealRatio: 0.65, critOn: true, critByRatio: true, critByHp: false, critDoScale: true, critDoBold: true },
-    tactical: { uiFont: 'rodin', dmgFont: 'rodin', dmgScale: '1.1', customWeight: '700', customStroke: 4, customStop: 0.3, customHealRatio: 0.75, critOn: true, critByRatio: true, critByHp: true, critDoScale: true, critDoBold: true },
-    minimal: { uiFont: 'skurri', dmgFont: 'skurri', dmgScale: '1.2', customWeight: '400', customStroke: 5, customStop: 0.15, customHealRatio: 0.85, critOn: true, critByRatio: true, critByHp: false, critDoScale: true, critDoBold: false },
+    original: { uiFont: 'bender', dmgFont: 'bender', dmgScale: '1.0', customWeight: '700', customStroke: 7, customStop: 0.25, customHealRatio: 0.9 },
+    official: { uiFont: 'novecento', dmgFont: 'novecento', dmgScale: '1.0', customWeight: '400', customStroke: 0, customStop: 0, customHealRatio: 0.65 },
+    tactical: { uiFont: 'rodin', dmgFont: 'rodin', dmgScale: '1.1', customWeight: '700', customStroke: 4, customStop: 0.3, customHealRatio: 0.75 },
+    minimal: { uiFont: 'skurri', dmgFont: 'skurri', dmgScale: '1.2', customWeight: '400', customStroke: 5, customStop: 0.15, customHealRatio: 0.85 },
     custom: {}
   };
   const p = presets[id] || {};
-  import('../render/fx/fonts.js').then((m) => {
-    if (id !== 'custom' && m.PRESET_DAMAGE_STYLES[id]) {
-      localStorage.setItem('sp.pref.damageStyleCustom', JSON.stringify(m.PRESET_DAMAGE_STYLES[id]));
-    }
-    updateFn({ presetMode: id, ...p });
-    if (p.uiFont) applyFontFamily(p.uiFont);
-    const f = p.dmgFont || settingsStore.get().dmgFont || 'novecento';
-    m.rebuildDamageFonts(f);
-  });
+  if (id !== 'custom') {
+    import('../render/fx/fonts.js').then((m) => {
+      if (m.PRESET_DAMAGE_STYLES?.[id]) {
+        localStorage.setItem('sp.pref.damageStyleCustom', JSON.stringify(m.PRESET_DAMAGE_STYLES[id]));
+      }
+    }).catch(() => {});
+  }
+  updateFn({ presetMode: id, ...p });
+  if (p.uiFont) applyFontFamily(p.uiFont);
+  const f = p.dmgFont || settingsStore.get().dmgFont || 'novecento';
+  import('../render/fx/fonts.js').then((m) => m?.rebuildDamageFonts?.(f)).catch(() => {});
 }`
   ],
   [
@@ -834,9 +1042,8 @@ function applyPresetMode(id, updateFn) {
     settingsControlsCode
   ]
 ]);
-
 // =========================================================================
-// 9. components.css & game-shop.css: 独立作用域微调
+// 9. public/css/components.css & game-shop.css: 独立作用域微调
 // =========================================================================
 applyPatchToFile('public/css/components.css', [
   [
@@ -924,5 +1131,5 @@ applyPatchToFile('public/css/screens/game-shop.css', [
 if (isRestore) {
   console.log('所有文件已彻底还原回原版！');
 } else {
-  console.log('个性化功能补丁已应用完成！随时可通过 node apply-font-patch.mjs --restore 一键还原。');
+  console.log('v0.2.6 个性化功能补丁已应用完成！随时可通过 node apply-font-patch.mjs --restore 一键还原。');
 }
