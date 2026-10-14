@@ -54,8 +54,8 @@
 
 在官方还原风格里有两档显示，由原「官方伤害数字」按钮（现已更名为**「仅显示官方数字」**）切换：
 
-- **按钮关闭（默认）：** 所有费用变动都弹字——回费是金色 `COST 10`（#E0A32C），扣费是红色 `COST −5`（#D4121A，行商特性扣费、琳琅诗怀雅的复活扣费）；技力方面，只有天赋、技能描述、盟约（萨尔贡、迅捷）等**明确写出的回复手段**弹青色 `SP 1`（#6FC6D2），时间流逝、攻击、受击的自然回复不弹字，与官方一致。
-- **按钮开启（完全对齐官方本尊）：** 费用只弹冲锋手、情报官等**跟随攻击的回费**和**行商扣费**，技能型回费（如德克萨斯的技能）不再弹字；技力规则不变。
+- **按钮关闭（默认）：** 所有费用变动都弹字——回费是金色 `COST 10`（#E0A32C），扣费是红色 `COST −5`（#D4121A，含行商特性扣费、个别干员的特性 / 复活类扣费）；技力方面，只有天赋、技能描述、盟约等**明确写出的回复手段**弹青色 `SP 1`（#6FC6D2），时间流逝、攻击、受击的自然回复不弹字，与官方一致。
+- **按钮开启（完全对齐官方本尊）：** 费用只弹冲锋手、情报官等**跟随攻击的回费**和**行商扣费**，技能型回费不再弹字；技力规则不变。
 
 弹字使用专用白色小字体染色，颜色精确，字号与治疗数字相当，并跟随「高级微调」里的整体字号滑块。弹字位置与官方伤害数字一致：挂在单位头顶上方（同样随模型身高取等比、跟随「高度」滑块），不再贴在胸口；非官方风格的 `+N` 回费弹字仍在原位置。
 
@@ -63,28 +63,26 @@
 >
 > Within the Authentic style there are two levels, switched by the old "Official Damage Numbers" button (renamed to **"Official Numbers Only"**):
 >
-> - **Button off (default):** every DP change pops text — gains in gold `COST 10` (#E0A32C), spends in red `COST −5` (#D4121A: the Merchant trait's pays and 琳琅诗怀雅's revive cost). For SP, only sources explicitly described in talents / skill texts / bonds (Sargon, Swift) pop a cyan `SP 1` (#6FC6D2); natural recovery (time, attacking, being hit) shows nothing, same as official.
-> - **Button on (fully matches the official game):** DP only pops for attack-followed gains (Charger / Agent kills) and Merchant spends — skill-based gains (e.g. Texas's skill) no longer show text; SP rules unchanged.
+> - **Button off (default):** every DP change pops text — gains in gold `COST 10` (#E0A32C), spends in red `COST −5` (#D4121A: the Merchant trait's pays and a few operators' trait / revive-style costs). For SP, only sources explicitly described in talents / skill texts / bonds pop a cyan `SP 1` (#6FC6D2); natural recovery (time, attacking, being hit) shows nothing, same as official.
+> - **Button on (fully matches the official game):** DP only pops for attack-followed gains (Charger / Agent kills) and Merchant spends — skill-based gains no longer show text; SP rules unchanged.
 >
 > The popups use a dedicated small white font tinted to exact colors, sized like heal numbers, following the overall size slider in "Fine-Tuning". They sit where the official damage numbers sit — above the unit's head, proportionally to the model's height and following the height slider — instead of at the chest; the non-Authentic `+N` cost label keeps its original spot.
 
 ### 5. 官方规则的红字（暴击）判定 / Official-rule red numbers (crits)
 
-修复了红字触发机制，完全对齐官方《明日方舟》的「伤害红字」规则（依据 PRTS 文档与官服实测）。核心是按官方规则计算**期望伤害**：期望 = 该干员「不带任何倍率的一次普通攻击」——攻击力属性照常计入（面板类「攻击力+X%」在内），防御/法抗照常参与但不考虑贯穿；一切攻击倍率——无论「攻击力提升至X%」还是技能文本里的「造成相当于攻击力X%的伤害」——以及其它临时增益只抬高实际伤害、不进期望。最终伤害 ≥ 期望 × 1.5 即出红：
+修复了红字触发机制，对齐官方《明日方舟》的「伤害红字」规则（参考 PRTS 社区文档）。核心是按官方规则计算**期望伤害**：期望 = 该伤害来源「不带任何倍率的一次普通攻击」——攻击力属性照常计入（面板类「攻击力+X%」在内），防御 / 法抗照常参与但不考虑贯穿；一切攻击倍率——无论「攻击力提升至X%」还是技能文本里的「造成相当于攻击力X%的伤害」——以及其它临时增益，只抬高实际伤害、不进期望。**最终伤害 ≥ 期望 × 1.5 即出红。**规则对所有干员一视同仁，这里只讲判定口径，不逐个点名技能：
 
-- **概率型「当次攻击力提升至X%」**：提升属于对攻击倍率的临时增加，从期望中剔除，倍率本身去比 1.5 阈值——普罗旺斯「狩猎箭头」（150%）、跃跃精二「戏耍随心」（150%）、寒芒克洛丝「中的」（150%）、古米天赋、黑「破甲箭头」、鸿雪「押韵」、阿的命运骰攻击面、山「巨力重拳」按各自倍率 ≥150% 自然出红（物理 `(atk×1.5−防御)/(atk−防御)≥1.5`，法术恰为 1.5）；不足 1.5 的（如跃跃精一的 130%）保持白字。本可红字的攻击被闪避时显示黄色 MISS。
-- **连续型条件倍率同样从期望剔除**：普罗旺斯「狼眼」、红豆模组「低血攻击力提升至115%」、跃跃的回环射手模组近身倍率——期望按未加成的倍率计算，实际越过 1.5 倍才出红字（狼眼最高 1.6 倍会红，1.3 倍不红）。
-- **技能倍率一律剔除，与措辞和形态无关**：「攻击力提升至X%」（`attack@atk_scale` 字段族——跃跃 1 技能「强力击·β型」200%/230%、斥罪 S1 蓄力锤击、蕾缪安 S1「重逢问候」弹药攻击 180%）与技能文本「造成相当于攻击力X%的伤害」的内联技能伤害（官服实测：德克萨斯 S2「剑雨」专三 170% 红、7 级 135% 白）一视同仁——涤火杰西卡 S3 炸弹（250%）、W S3 D12（430%）这类 ≥150% 的脱手技能伤害全部出红。技能形态也不影响判定：弹药只是技能持续的一种形式（固定弹药数而非固定时长），instant / charges 的单发与 duration / ammo / toggle 的持续生效一视同仁。
-- **强制红字仅限官方点名技能**：蕾缪安 S2「归乡邀约」瞄准射击、S3「礼炮·强制追思」轰炸无视阈值必定红字（名单另一位谜图「疑点追踪」满层未参战）。这类强制红字被护盾/屏障挡下时官方会转蓝字或黄字 BLOCK，该特显本补丁暂未实现。
-- **面板型增益不触发红字**：红豆「蛮力穿刺」这类直接改变攻击力面板的「攻击力+X%」，期望与实际同时计入，保持白字——与官方一致。斥罪的蓄力状态（攻击力倍率提升）则从期望侧剔除，蓄力攻击按官方规则出红。
+- **概率型 / 条件型的「当次攻击力提升至X%」**：这类提升属于对倍率的临时增加，从期望中剔除，由倍率自身去比 1.5 阈值——≥150% 的自然出红，不足 1.5 的保持白字。本可红字的攻击被闪避时显示黄色 MISS。
+- **技能倍率一律剔除，与措辞和形态无关**：「攻击力提升至X%」与「造成相当于攻击力X%的伤害」一视同仁；瞬发、蓄力、持续、弹药、开关等技能形态同样不影响判定，≥150% 的脱手技能伤害也出红。
+- **面板型增益不触发红字**：直接改变攻击力面板的「攻击力+X%」类增益在期望与实际两侧同时计入，保持白字；蓄力、随机类等临时倍率则从期望侧剔除，按官方规则判定。
+- **强制红字仅限官方点名的一小撮技能**：无视阈值必定红字。这类红字被护盾 / 屏障挡下时官方会转蓝字或黄字 BLOCK，该特显本补丁暂未实现。
 - 同人在 1.0~1.5 倍之间显示白字（官方此时不显示数字）；打开「仅显示官方数字」后，非红字数字隐藏、红字为不加粗的 #E34C25；其余情况（含官方还原未开该选项时）一律用加大 / 加粗表示暴击。
 
-> The red-number (crit) rules now match the official game exactly (per the PRTS doc and in-client testing). The core is an **expected damage** = the operator's plain unscaled attack: the ATK attribute counts as-is (panel 攻击力+X% buffs included), mitigation applies but ignores penetration, and every attack scale — "ATK raised to X%" and the inline skill formulas "deals X% ATK as damage" alike — plus any other temporary raise only lifts the final damage, never the expectation. Red when final ≥ expected × 1.5:
-> - Probability "当次攻击力提升至X%" raises are excluded from the expected side, so the multiplier itself faces the 1.5 threshold — 狩猎箭头 (150%), 戏耍随心 at E2 (150%), 中的 (150%), 古米's talent, 破甲箭头, 押韵, 阿's dice ATK face and 巨力重拳 all redden at ≥150% (phys `(atk×1.5−def)/(atk−def)≥1.5`, arts exactly 1.5); below 1.5 (戏耍随心 E1 130%) stays white. A would-be-red hit that gets dodged shows a yellow MISS.
-> - Continuous conditional scales (狼眼, 红豆's low-HP module, the loopshooter module's near bonus) are excluded the same way — red only past 1.5×.
-> - Skill scales are all excluded, wording and form alike: "ATK raised to X%" (the `attack@atk_scale` family — 强力击·β型, 斥罪 S1's gavel, 蕾缪安 S1's 180% ammo attacks) and the inline skill formulas "deals X% ATK as damage" (in-client verified: 德克萨斯 S2 专三 170% red, lv7 135% white) behave identically — off-field skill damage at ≥150% (涤火杰西卡 S3's 250% bomb, W's S3 D12 at 430%) reddens. Ammo is just a duration variant (a fixed bullet count instead of a fixed duration), so instant / charges one-shots and duration / ammo / toggle uptimes all behave the same — red past 1.5×.
-> - Forced red is reserved for the officially listed skills — 蕾缪安's S2 aimed shot and S3 bombardment (the list's other member, 谜图's max-stacked 疑点追踪, is not in this game). When such a hit is blocked by a shield the official client switches to a blue number or yellow BLOCK; that special display is not implemented yet.
-> - Panel-ATK buffs (蛮力穿刺-style 攻击力+X%) stay on both sides and never redden, as official; 斥罪's charged 攻击力倍率 state is excluded from the expected side and reddens per the official rule.
+> The red-number (crit) rules follow the official game's (compiled from the PRTS community doc). The core is an **expected damage** = the source's plain unscaled normal attack: the ATK attribute counts as-is (panel 攻击力+X% buffs included), mitigation applies but ignores penetration, and every attack scale — "ATK raised to X%" and the inline skill formulas "deals X% ATK as damage" alike — plus any other temporary raise only lifts the final damage, never the expectation. **Red when final ≥ expected × 1.5.** The rule treats every operator alike, so this states the policy rather than a per-skill list:
+> - Probability / conditional "当次攻击力提升至X%" raises are excluded from the expected side, so the multiplier itself faces the 1.5 threshold — ≥150% reddens, below 1.5 stays white. A would-be-red hit that gets dodged shows a yellow MISS.
+> - Skill scales are all excluded, wording and form alike: "ATK raised to X%" and "deals X% ATK as damage" behave identically, and instant / charged / duration / ammo / toggle forms don't matter — off-field skill damage ≥150% reddens too.
+> - Panel-ATK buffs (攻击力+X%) stay on both sides and never redden; charged / random-type temporary scales are excluded from the expected side and judged by the official rule.
+> - Forced red is reserved for the small officially listed set of skills — always red regardless of threshold. When such a hit is blocked by a shield the official client switches to a blue number or yellow BLOCK; that special display is not implemented yet.
 > - The fan game shows white numbers between 1.0–1.5× (official shows none); with "Official Numbers Only" on, non-red numbers hide and the red shows as the non-bold #E34C25; otherwise crits (the Authentic style included) keep the bold / enlarged treatment.
 
 ### 6. 官方还原风格的数字行为 / Number behavior in the Authentic style
@@ -195,19 +193,19 @@ node apply-font-patch.mjs --restore
 | `server/sim/professions.js` | 行商扣费与冲锋手回费的 COST 弹字事件 / COST popup events for merchant pays and charger kills |
 | `server/sim/skills.js` | 明确来源技力回复的 SP 弹字事件 / SP popup events for explicitly granted skill points |
 | `public/js/render/fx/simfx.js` | COST / SP 弹字的绘制、头顶挂载与风格开关 / Draws the COST / SP popups (anchored head-top) and the style gating |
-| `server/sim/content/kits/ops/chess_char_3_04-swire2.js` | 琳琅诗怀雅：特性扣费与复活扣费弹字 / 琳琅诗怀雅's trait pay and revive cost popups |
+| `server/sim/content/kits/ops/chess_char_3_04-swire2.js` | 干员特性 / 复活类扣费的 COST 弹字 / Trait- and revive-style COST pay popups |
 | `server/sim/ai.js` | 红字期望 = 来源裸攻击力；技能攻击的「攻击力提升至X%」与一切技能倍率只抬实际值（弹药/持续形态同样）/ Expected = the source's plain unscaled attack; skill ATK scales (ammo & duration forms included) only lift the final damage |
-| `server/sim/content/kits/ops/chess_char_1_07-prove.js` | 普罗旺斯：狼眼与狩猎箭头的当次倍率均从期望剔除（×1.5 恰好出红） / 狼眼 & 狩猎箭头 scales excluded from expected |
-| `server/sim/content/kits/ops/chess_char_1_09-caper.js` | 跃跃：近身模组与戏耍随心的当次倍率均从期望剔除 / Near-module & 戏耍随心 scales excluded from expected |
-| `server/sim/content/kits/ops/chess_char_1_10-sunbr.js` | 古米：天赋概率倍率从期望剔除（≥150% 出红） / Talent prob scale excluded from expected |
-| `server/sim/content/kits/ops/chess_char_1_05-vigna.js` | 红豆：模组低血倍率剔除期望（面板型天赋不标记） / Module low-HP scale excluded (panel talent untouched) |
-| `server/sim/content/kits/ops/chess_char_4_06-kroos2.js` | 寒芒克洛丝：「中的」×1.5 从期望剔除（恰好出红） / 中的 ×1.5 excluded from expected |
-| `server/sim/content/kits/ops/chess_char_5_17-f12yin.js` | 山：巨力重拳倍率从期望剔除 / 巨力重拳 scale excluded from expected |
-| `server/sim/content/kits/ops/op-bgsnow.js` | 鸿雪：押韵倍率从期望剔除 / 押韵 scale excluded from expected |
-| `server/sim/content/kits/ops/op-shwaz.js` | 黑：破甲箭头倍率从期望剔除 / 破甲箭头 scale excluded from expected |
-| `server/sim/content/kits/ops/op-haak.js` | 阿：命运骰攻击面倍率从期望剔除 / Dice ATK face scale excluded from expected |
-| `server/sim/content/kits/ops/op-judge.js` | 斥罪：蓄力锤击倍率剔除期望 / Gavel scale excluded from expected |
-| `server/sim/content/kits/ops/chess_char_6_01-lemuen.js` | 蕾缪安：S2 瞄准与 S3 礼炮官方强制红字 / S2 aim & S3 bombard: officially forced red |
+| `server/sim/content/kits/ops/chess_char_1_07-prove.js` | 概率型与条件型当次倍率从期望剔除 / Probability- and conditional-type hit scales excluded from expected |
+| `server/sim/content/kits/ops/chess_char_1_09-caper.js` | 条件型与模组类倍率从期望剔除 / Conditional & module-type scales excluded |
+| `server/sim/content/kits/ops/chess_char_1_10-sunbr.js` | 天赋概率倍率从期望剔除 / Talent probability scale excluded |
+| `server/sim/content/kits/ops/chess_char_1_05-vigna.js` | 模组低血倍率剔除期望（面板型天赋不标记）/ Low-HP module scale excluded (panel-type talent untouched) |
+| `server/sim/content/kits/ops/chess_char_4_06-kroos2.js` | 概率型倍率从期望剔除 / Probability-type scale excluded |
+| `server/sim/content/kits/ops/chess_char_5_17-f12yin.js` | 主动技能倍率从期望剔除 / Active skill scale excluded |
+| `server/sim/content/kits/ops/op-bgsnow.js` | 天赋类倍率从期望剔除 / Talent-type scale excluded |
+| `server/sim/content/kits/ops/op-shwaz.js` | 天赋类倍率从期望剔除 / Talent-type scale excluded |
+| `server/sim/content/kits/ops/op-haak.js` | 随机倍率面从期望剔除 / Random-face ATK scale excluded |
+| `server/sim/content/kits/ops/op-judge.js` | 蓄力类倍率从期望剔除 / Charged-hit scale excluded |
+| `server/sim/content/kits/ops/chess_char_6_01-lemuen.js` | 官方点名强制红字的技能 / Officially forced red numbers |
 
 ---
 
