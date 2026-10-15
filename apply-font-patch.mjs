@@ -530,7 +530,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     baseMult = Number(pref?.dmgScale) || 1.0;
     healRatio = pref?.customHealRatio != null ? Number(pref.customHealRatio) : (pref?.presetMode === 'original' ? 0.9 : 0.75);
   } catch (e) {}
-  return clamp(s / 115, 0.42, 1.05) * baseMult * (big ? 1.35 : 1) * (style === 'heal' ? healRatio : 1);
+  return clamp(s / 115, 0.42, 1.05) * baseMult * (big ? 1.35 : 1) * (style === 'heal' || style === 'miss' ? healRatio : 1);   // MISS 同小字字号（与 SP/COST 一样大）
 };`
   ],
   // 1. 拦截 dmg 签名与触发条件
@@ -619,12 +619,13 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const cam = this.ctx.cam();
     const feetZ = (view.z || 0) + (view.hover || 0);
     const hT = view._headTiles || 1.2;   // 模型头高: 敌人按各自 spine bounds（0.55~2.2，Boss 至 3.2），干员统一 1.18
-    const base = feetZ + hT;
+    // 模型是「直立屏幕 billboard」（units.js bounds(): 画布身高 = hT×s；projection.js liftFor 注释: 30° 俯角下
+    // 一格世界竖高只画约半格）——真实头顶 = feet.y − hT×s，与棋盘远近行无关。旧版把 hT 当世界 z 投影: 一格只当
+    // 半格用，且近行更扁、远行更长（同格 ±20%）——这就是「最下行正常、最上行浮高」的根因。抖动/上浮的「格」同用这把立绘标尺。
     const feet = cam.project(view.x, view.y, feetZ, this._p);
-    const head = cam.project(view.x, view.y, base, this._q);
-    const s = head.s > 0 ? head.s : 100;
-    const pxPerZ = (feet.y - head.y) / hT;
-    const tile = pxPerZ > 1e-3 ? pxPerZ : s;
+    const s = feet.s > 0 ? feet.s : 100;
+    const headTop = feet.y - hT * s;
+    const tile = s;   // 立绘标尺的一格: 世界一格在画布上的边长，全棋盘恒定
     // 与普攻路径读同一套「高级微调」滑块（this.ctx.settings）。「官方数字行为」的出厂值 = 官方本尊表现:
     // 不合并、0 抖动、无上限(9)、高度/上浮速度 1.0——偏离出厂值后这里同样生效，两条管线不再各说各话。
     const _hO = Number(this.ctx.settings?.customHeight), _jO = Number(this.ctx.settings?.customJitter), _rO = Number(this.ctx.settings?.numRiseSpeed);
@@ -636,9 +637,10 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const w = numChars(n, style) * NUM_DIGIT_EM * 24 * sc * NUM_POP + NUM_GAP_PX;
     const h = 24 * NUM_LINE_EM * sc * NUM_POP;
     this._layoutNumsOnce(cam);
-    // 头顶间距随模型头高等比（×hT/UNIT.headroom）: 矮敌不悬空、高敌不贴头；干员 hT=1.18 恰为基准 → 已调好的 1 格分毫不动
-    // 治疗属小字: 间距再乘 SMALL_LIFT(0.9) 稍低于常规数字（SP/COST 小字同规则）
-    let cy = head.y - OFFICIAL_LIFT * heightFactor * (hT / UNIT.headroom) * (style === 'heal' ? SMALL_LIFT : 1) * tile;
+    // 头顶间距随模型头高等比（×hT/UNIT.headroom）: 矮敌不悬空、高敌不贴头；干员 hT=1.18 恰为基准。
+    // 数字底边（anchor 0.5,1）悬在真实头顶上方 OFFICIAL_LIFT 格——全棋盘每排一致。
+    // 小字（治疗/MISS）: 间距乘 SMALL_LIFT(=常规×0.8)；SP/COST 小字同规则
+    let cy = headTop - OFFICIAL_LIFT * heightFactor * (hT / UNIT.headroom) * (style === 'heal' || style === 'miss' ? SMALL_LIFT : 1) * s;
     // 「跳字避让」开启: 与普攻路径同一套垂直找位（_numSlotPx 只向上叠、不横移，保持官方居中），
     // 新数字盖不到在场的旧数字头上；关闭时官方默认叠放（后来者盖上，官方本尊如此）。
     if (this.ctx.settings?.numAvoid === true) cy = this._numSlotPx(cx, cy, w, h, OFFICIAL_RISE * riseSpeed * tile);
@@ -651,7 +653,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
       }
       if (youngest && now - youngest.lastHit < NUM_MERGE_GAP && youngest.life < OFFICIAL_RISE_T * 0.55) {
         youngest.value += n;
-        youngest.text.text = String(youngest.value);
+        youngest.text.text = (style === 'heal' ? '+' : '') + youngest.value;   // 治疗 '+' 与作者经典管线/numChars 宽度一致
         youngest.pop = 1;
         youngest.big = youngest.big || bigCrit;
         youngest.lastHit = now;
@@ -675,7 +677,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const t = this._takeNum(style, bigCrit && this.ctx.settings?.critDoBold !== false);
     t.text.visible = true;
     t.text.alpha = 1;
-    t.text.text = miss ? 'MISS' : String(n);
+    t.text.text = miss ? 'MISS' : (style === 'heal' ? '+' : '') + n;   // 治疗带 '+'（作者经典管线同款，numChars 早已预留该字符宽度）
     Object.assign(t, {
       unit: view, style, value: n, life: 0, end: OFFICIAL_LIFE, born: now, lastHit: now, pop: 1, big: bigCrit, fading: false,
       official: true, critPop: bigCrit || style === 'crit',   // 官方数字行为下的暴击（加大加粗 / 红字）才有入场动画
@@ -825,12 +827,18 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     `  numberAt(x, y, label, tint, life = 0.8, view = null) {
     const P = this.P;
     if (view) {
-      // 传入单位视图: 标签挂到与官方跳字相同的头顶定位（等比间距 + 「高度」滑块）——SP/COST 不再贴在胸口
+      // 传入单位视图: 与 officialNumber 完全同一把「立绘标尺」——模型是直立屏幕 billboard（units.js bounds() 同款:
+      // 头顶 = feet.y − hT×s，全棋盘每排一致；旧版世界 z 投影尺近扁远长，且与治疗不同尺）。x 取脚底投影 x 与伤害数字同中轴。
       const cam = this.ctx.cam();
+      const feetZ = (view.z || 0) + (view.hover || 0);
       const hT = view._headTiles || 1.2;
+      const feet = cam.project(view.x, view.y, feetZ, this._p);
+      const s = feet.s > 0 ? feet.s : 100;
+      const headTop = feet.y - hT * s;
       const _hf = Number(this.ctx.settings?.customHeight);
-      const lift = OFFICIAL_LIFT * (Number.isFinite(_hf) ? _hf : 1.0) * (hT / UNIT.headroom) * SMALL_LIFT;   // 小字比常规数字稍低
-      y = cam.project(view.x, view.y, (view.z || 0) + (view.hover || 0) + hT + lift, this._q).y;
+      const lift = OFFICIAL_LIFT * (Number.isFinite(_hf) ? _hf : 1.0) * (hT / UNIT.headroom) * SMALL_LIFT;   // 小字与治疗同高
+      x = feet.x;
+      y = headTop - lift * s;
     }
     if (this.labels.length >= 24) { const o = this.labels.shift(); o.t.destroy(); }
     let labelScale = 1.0;
@@ -846,9 +854,11 @@ const OFFICIAL_LIFT_MIN = 0.15;  // tiles above the head
 const OFFICIAL_LIFT_SPAN = 0.4;`,
     `// 官方数字行为（authenticNums）: 官方数字在头上正中央呈现、迅速上浮后迅速消失。
 // 出厂值 = 官方本尊：不合并、0 抖动、上限 ∞（滑块 9）、高度/上浮速度 1.0——「高级微调」里偏离后同样生效。
-const OFFICIAL_LIFT = 1.0;       // tiles: 头顶再抬高（0.45→0.9→1.5→1.0，应用户逐次调整）；实际间距随模型头高等比 ×hT/UNIT.headroom
-const SMALL_LIFT = 0.9;          // SP/COST/治疗等小字的头顶间距系数: 比常规数字稍低（2026-10-15 应用户要求）
-const OFFICIAL_RISE = 0.34;      // tiles of the quick rise
+const OFFICIAL_LIFT = 0.1;       // tiles(画布真实格): 常规数字底边离「绘出身高头顶」的间距；标尺修正日自 1.5 等效换算
+                                 // （旧尺一格只当半格、且近扁远长——近行 1.5 恰好贴着头顶，等效真实格 ≈0，取 0.1 留一丝空隙）
+                                 // 间距随模型头高等比 ×hT/UNIT.headroom；「高度」滑块在此之上缩放
+const SMALL_LIFT = 0.8;          // SP/COST/治疗/MISS 小字的头顶间距系数: =常规×0.8（0.1×0.8=0.08 格）
+const OFFICIAL_RISE = 0.15;      // tiles(画布真实格) of the quick rise（旧值 0.34 是半格尺，观感等效 ≈0.15，修正标尺后取等效值）
 const OFFICIAL_RISE_T = 0.3;     // seconds of the rise
 const OFFICIAL_LIFE = 0.6;       // seconds a number lives
 const OFFICIAL_FADE = 0.18;      // fade-out at the end
