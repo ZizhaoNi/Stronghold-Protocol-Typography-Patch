@@ -523,11 +523,12 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
   [
     "const numScale = (s, big, style) => clamp(s / 115, 0.42, 1.05) * (big ? 1.35 : 1) * (style === 'heal' ? 0.9 : 1);",
     `const numScale = (s, big, style) => {
-  let baseMult = 1.0, healRatio = 0.65;
+  // 治疗基准 0.75: 24×0.75=18px，与 SP/COST 小字同大（2026-10-15 应用户要求自 0.65 上调）；原版经典预设仍走作者的 0.9
+  let baseMult = 1.0, healRatio = 0.75;
   try {
     const pref = JSON.parse(localStorage.getItem('sp.pref.settings'));
     baseMult = Number(pref?.dmgScale) || 1.0;
-    healRatio = pref?.customHealRatio != null ? Number(pref.customHealRatio) : (pref?.presetMode === 'original' ? 0.9 : 0.65);
+    healRatio = pref?.customHealRatio != null ? Number(pref.customHealRatio) : (pref?.presetMode === 'original' ? 0.9 : 0.75);
   } catch (e) {}
   return clamp(s / 115, 0.42, 1.05) * baseMult * (big ? 1.35 : 1) * (style === 'heal' ? healRatio : 1);
 };`
@@ -630,13 +631,14 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const heightFactor = Number.isFinite(_hO) ? _hO : 1.0;
     const jitterRange = Number.isFinite(_jO) ? _jO : 0;
     const riseSpeed = Number.isFinite(_rO) ? _rO : 1.0;
-    const cx = feet.x + (Math.random() - 0.5) * jitterRange * 2;   // 抖动 0 = 头顶正中央（官方）
+    const cx = feet.x + (Math.random() - 0.5) * jitterRange * 2 * tile;   // 抖动以「格」计（作者原版同单位），0 = 头顶正中央
     const sc = numScale(s, bigCrit, style);
     const w = numChars(n, style) * NUM_DIGIT_EM * 24 * sc * NUM_POP + NUM_GAP_PX;
     const h = 24 * NUM_LINE_EM * sc * NUM_POP;
     this._layoutNumsOnce(cam);
     // 头顶间距随模型头高等比（×hT/UNIT.headroom）: 矮敌不悬空、高敌不贴头；干员 hT=1.18 恰为基准 → 已调好的 1 格分毫不动
-    let cy = head.y - OFFICIAL_LIFT * heightFactor * (hT / UNIT.headroom) * tile;
+    // 治疗属小字: 间距再乘 SMALL_LIFT(0.9) 稍低于常规数字（SP/COST 小字同规则）
+    let cy = head.y - OFFICIAL_LIFT * heightFactor * (hT / UNIT.headroom) * (style === 'heal' ? SMALL_LIFT : 1) * tile;
     // 「跳字避让」开启: 与普攻路径同一套垂直找位（_numSlotPx 只向上叠、不横移，保持官方居中），
     // 新数字盖不到在场的旧数字头上；关闭时官方默认叠放（后来者盖上，官方本尊如此）。
     if (this.ctx.settings?.numAvoid === true) cy = this._numSlotPx(cx, cy, w, h, OFFICIAL_RISE * riseSpeed * tile);
@@ -711,11 +713,12 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
     const feet = cam.project(view.x, view.y, feetZ, this._p);
     const head = cam.project(view.x, view.y, base, this._q);
 
-    const ax = feet.x + (Math.random() - 0.5) * jitterRange * 2;
     const ay = head.y;
     const s = head.s > 0 ? head.s : 100;
     const pxPerZ = (feet.y - head.y) / (span > 1e-3 ? span : 1);
-    const risePx = (NUM_RISE * riseSpeed) * (pxPerZ > 1e-3 ? pxPerZ : s * 0.5);`
+    const tile = pxPerZ > 1e-3 ? pxPerZ : s * 0.5;
+    const ax = feet.x + (Math.random() - 0.5) * jitterRange * 2 * tile;   // 抖动以「格」计，0 = 无抖动（原版经典原样）
+    const risePx = (NUM_RISE * riseSpeed) * tile;`
   ],
   // 5. 控制跳字相加与同屏上限
   [
@@ -826,7 +829,7 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
       const cam = this.ctx.cam();
       const hT = view._headTiles || 1.2;
       const _hf = Number(this.ctx.settings?.customHeight);
-      const lift = OFFICIAL_LIFT * (Number.isFinite(_hf) ? _hf : 1.0) * (hT / UNIT.headroom);
+      const lift = OFFICIAL_LIFT * (Number.isFinite(_hf) ? _hf : 1.0) * (hT / UNIT.headroom) * SMALL_LIFT;   // 小字比常规数字稍低
       y = cam.project(view.x, view.y, (view.z || 0) + (view.hover || 0) + hT + lift, this._q).y;
     }
     if (this.labels.length >= 24) { const o = this.labels.shift(); o.t.destroy(); }
@@ -844,6 +847,7 @@ const OFFICIAL_LIFT_SPAN = 0.4;`,
     `// 官方数字行为（authenticNums）: 官方数字在头上正中央呈现、迅速上浮后迅速消失。
 // 出厂值 = 官方本尊：不合并、0 抖动、上限 ∞（滑块 9）、高度/上浮速度 1.0——「高级微调」里偏离后同样生效。
 const OFFICIAL_LIFT = 1.0;       // tiles: 头顶再抬高（0.45→0.9→1.5→1.0，应用户逐次调整）；实际间距随模型头高等比 ×hT/UNIT.headroom
+const SMALL_LIFT = 0.9;          // SP/COST/治疗等小字的头顶间距系数: 比常规数字稍低（2026-10-15 应用户要求）
 const OFFICIAL_RISE = 0.34;      // tiles of the quick rise
 const OFFICIAL_RISE_T = 0.3;     // seconds of the rise
 const OFFICIAL_LIFE = 0.6;       // seconds a number lives
@@ -945,7 +949,7 @@ const damageCustomSectionCode = [
   "  '仅放大': { en: 'Scale Only', ja: '拡大のみ', ko: '확대만', 'zh-TW': '僅放大' },",
   "  '暴击加粗': { en: 'Crit Bold', ja: 'クリティカル太字', ko: '치명타 굵게', 'zh-TW': '暴擊加粗' },",
   "  '仅显示官方数字': { en: 'Official Numbers Only', ja: '公式数字のみ', ko: '공식 숫자만', 'zh-TW': '僅顯示官方數字' },",
-  "  '官方数字行为：头顶居中・快速上浮消失；合并/抖动/上限等滑块可自由偏离官方表现；暴击加大加粗，开「仅显示官方数字」后为不加粗红字': { en: 'Official number behavior: head-top centered, quick rise & fade; the merge / jitter / cap sliders can freely deviate from the official look; crits big & bold (non-bold red under \"Official Numbers Only\")', ja: '公式数字挙動：頭上中央・高速上昇/消滅；統合/ゆらぎ/上限などのスライダーで公式から自由に調整可能；クリティカルは太字拡大（「公式数字のみ」で太字なし赤字）', ko: '공식 숫자 동작: 머리 위 중앙, 빠른 상승/소멸; 병합/흔들림/상한 등 슬라이더로 공식 표현에서 자유롭게 조정 가능; 치명타는 굵게 확대(「공식 숫자만」에서 굵지 않은 빨간 숫자)', 'zh-TW': '官方數字行為：頭上居中・快速上浮消失；合併/抖動/上限等滑桿可自由偏離官方表現；暴擊加大加粗，開「僅顯示官方數字」後為不加粗紅字' },",
+  "  '官方数字行为：头顶居中・快速上浮消失・出厂不合并无上限；调整行为滑块只会熄灭本开关、数字仍走官方管线，再点开关即恢复官方出厂值（点亮时点关闭＝回到原版管线）；暴击加大加粗，开「仅显示官方数字」后为不加粗红字': { en: 'Official number behavior: head-top centered, quick rise & fade, no merging / no cap at factory; adjusting the behavior sliders only dims this switch (numbers stay on the official pipeline) — click the switch to snap back to the official factory values (clicking it while lit turns it off = the classic pipeline); crits big & bold (non-bold red under \"Official Numbers Only\")', ja: '公式数字挙動：頭上中央・高速上昇/消滅・初期設定は統合なし上限なし；スライダー調整ではスイッチが消灯するだけで数字は公式パイプラインのまま、スイッチを押せば公式の初期値に戻ります（点灯中にオフにすれば旧パイプライン）；クリティカルは太字拡大（「公式数字のみ」で太字なし赤字）', ko: '공식 숫자 동작: 머리 위 중앙, 빠른 상승/소멸, 기본값은 병합 없음/상한 없음; 슬라이더를 조정해도 스위치가 꺼질 뿐 숫자는 공식 파이프라인을 유지하며, 스위치를 다시 누르면 공식 기본값으로 돌아갑니다(켜진 상태에서 끄면 원본 파이프라인); 치명타는 굵게 확대(「공식 숫자만」에서 굵지 않은 빨간 숫자)', 'zh-TW': '官方數字行為：頭上居中・快速上浮消失・出廠不合併無上限；調整行為滑桿只會熄滅本開關、數字仍走官方管線，再點開關即恢復官方出廠值（點亮時點關閉＝回到原版管線）；暴擊加大加粗，開「僅顯示官方數字」後為不加粗紅字' },",
   '};',
   'function tr(text) {',
   "  const lang = document.documentElement.lang || 'zh';",
@@ -1009,7 +1013,7 @@ const damageCustomSectionCode = [
   "    ['apoptosis', '凋亡伤害(爆条)'], ['erosion', '侵蚀伤害(爆条)']",
   '  ];',
   '  const currentScale = Number(s.dmgScale || 1.0);',
-  '  const currentHealRatio = Number(s.customHealRatio ?? 0.65);',
+  '  const currentHealRatio = Number(s.customHealRatio ?? 0.75);',
   '  const currentHeight = Number(s.customHeight ?? 1.0);',
   '  const currentJitter = Number(s.customJitter ?? 0);',
   '  const currentRise = Number(s.numRiseSpeed ?? 1.0);',
@@ -1025,7 +1029,7 @@ const damageCustomSectionCode = [
   '      </button>',
   '    </div>',
   '    ${open ? html`<div style="display:flex;flex-direction:column;gap:.1rem;padding:.12rem;background:rgba(0,0,0,.45);border:1px solid var(--line-2);margin-top:.06rem;">',
-  '      ${s.authenticNums ? html`<div style="font-size:.12rem;color:var(--text-dim);line-height:1.5;padding:.02rem .04rem;border-bottom:1px dashed var(--line);">${tr(\'官方数字行为：头顶居中・快速上浮消失；合并/抖动/上限等滑块可自由偏离官方表现；暴击加大加粗，开「仅显示官方数字」后为不加粗红字\')}</div>` : null}',
+  '      ${s.authenticNums ? html`<div style="font-size:.12rem;color:var(--text-dim);line-height:1.5;padding:.02rem .04rem;border-bottom:1px dashed var(--line);">${tr(\'官方数字行为：头顶居中・快速上浮消失・出厂不合并无上限；调整行为滑块只会熄灭本开关、数字仍走官方管线，再点开关即恢复官方出厂值（点亮时点关闭＝回到原版管线）；暴击加大加粗，开「仅显示官方数字」后为不加粗红字\')}</div>` : null}',
   '      <div class="set-row">',
   '        <span class="set-row__label">${tr(\'本地字体名称\')}<${MicroLabel}>LOCAL FONT<//></span>',
   '        <div style="display:flex;gap:.06rem;align-items:center;flex:1;justify-content:flex-end;">',
@@ -1061,15 +1065,25 @@ const damageCustomSectionCode = [
   '        <input class="set-range" type="range" min="0.3" max="1.5" step="0.05" value=${currentHealRatio}',
   '          onInput=${(e) => updateSettings({ customHealRatio: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
-  '      <${Toggle} label=${tr(\'官方数字行为\')} micro="AUTHENTIC" value=${s.authenticNums !== false} onChange=${(v) => updateSettings({ authenticNums: v, presetMode: \'custom\' })} />',
+  // 开关点亮 = 官方管线且六项行为滑块全在官方出厂值（动滑块只熄灭开关、数字仍走官方管线；点开关即恢复出厂；点亮时点关闭＝原版管线）。
+  // 滑块行本身不再写 authenticNums——那会把整条管线连锚点一起拽回原版，数字高度会突降（2026-10-15 用户报告）。
+  '      <${Toggle} label=${tr(\'官方数字行为\')} micro="AUTHENTIC" value=${s.authenticNums !== false && s.numMerge === false && s.numAvoid === false && Number(s.numMaxPerTarget) === 9 && Number(s.customHeight) === 1 && Number(s.customJitter) === 0 && Number(s.numRiseSpeed) === 1} onChange=${(v) => updateSettings(v ? {',
+  '        // 开 = 官方管线，六项行为滑块重置为官方出厂值（合并/避让关、上限 ∞、高度/抖动/速度 1/0/1）',
+  '        authenticNums: true, numMerge: false, numAvoid: false, numMaxPerTarget: 9,',
+  '        customHeight: 1.0, customJitter: 0, numRiseSpeed: 1.0, presetMode: \'custom\',',
+  '      } : {',
+  '        // 关 = 原版管线，滑块恢复原版默认（合并/避让开、上限 4）',
+  '        authenticNums: false, numMerge: true, numAvoid: true, numMaxPerTarget: 4,',
+  '        customHeight: 1.0, customJitter: 0, numRiseSpeed: 1.0, presetMode: \'custom\',',
+  '      })} />',
   '      <div class="set-row">',
   '        <span class="set-row__label">${tr(\'跳字垂直高度\')}<${MicroLabel}>HEIGHT (${Math.round(currentHeight * 100)}%)<//></span>',
   '        <input class="set-range" type="range" min="0.0" max="1.5" step="0.05" value=${currentHeight}',
   '          onInput=${(e) => updateSettings({ customHeight: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
-  '        <span class="set-row__label">${tr(\'跳字左右抖动\')}<${MicroLabel}>JITTER (${currentJitter}px)<//></span>',
-  '        <input class="set-range" type="range" min="0" max="5" step="0.5" value=${currentJitter}',
+  '        <span class="set-row__label">${tr(\'跳字左右抖动\')}<${MicroLabel}>JITTER (±${currentJitter}格)<//></span>',
+  '        <input class="set-range" type="range" min="0" max="1.5" step="0.05" value=${currentJitter}',
   '          onInput=${(e) => updateSettings({ customJitter: Number(e.currentTarget.value), presetMode: \'custom\' })} style="flex:1;margin-left:.1rem;" />',
   '      </div>',
   '      <div class="set-row">',
@@ -1480,8 +1494,9 @@ applyPatchToFile('public/js/render/fx/simfx.js', [
         const authenticMode = (this.ctx.settings?.presetMode || 'authentic') === 'authentic';
         const officialOnly = !!this.ctx.settings?.officialDamageNumbers;
         if (authenticMode) {
-          if (n < 0) this.numberAt(p.x + s * 0.2, p.y, \`COST −\${-n}\`, 0xd4121a, 0.7, at.v);
-          else if (n > 0 && (ex.kill || !officialOnly)) this.numberAt(p.x + s * 0.2, p.y, \`COST \${n}\`, 0xe0a32c, 0.7, at.v);
+          // 头顶正中央（去掉作者给小字的 +0.2 格右偏，只留原版风格分支使用）
+          if (n < 0) this.numberAt(p.x, p.y, \`COST −\${-n}\`, 0xd4121a, 0.7, at.v);
+          else if (n > 0 && (ex.kill || !officialOnly)) this.numberAt(p.x, p.y, \`COST \${n}\`, 0xe0a32c, 0.7, at.v);
         } else if (n > 0 && !ex.quiet) {
           this.numberAt(p.x + s * 0.2, p.y, \`+\${n}\`, col, 0.7);
         }
@@ -1503,7 +1518,7 @@ applyPatchToFile('public/js/render/fx/simfx.js', [
           }
           this.particle('glow', p.x, p.y, { tint: col, life: 0.3, s0: s / 128 * 0.6, s1: s / 128 * 1.1, a0: 0.7, a1: 0 });
         }
-        if (ex.n > 0 && (this.ctx.settings?.presetMode || 'authentic') === 'authentic') this.numberAt(p.x + s * 0.2, p.y, \`SP \${Math.round(ex.n)}\`, 0x6fc6d2, 0.7, at.v);
+        if (ex.n > 0 && (this.ctx.settings?.presetMode || 'authentic') === 'authentic') this.numberAt(p.x, p.y, \`SP \${Math.round(ex.n)}\`, 0x6fc6d2, 0.7, at.v);
         break;
       }`
   ],
