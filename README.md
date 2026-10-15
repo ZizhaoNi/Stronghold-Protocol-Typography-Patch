@@ -1,7 +1,7 @@
 # 《卫戍协议》伤害数字美化补丁 · 使用说明
 # Stronghold Protocol Damage-Number Patch · User Guide
 
-**适用游戏 / For：** Stronghold Protocol（明日方舟「卫戍协议：盟约」同人网页游戏）v0.2.6.1
+**适用游戏 / For：** Stronghold Protocol（明日方舟「卫戍协议：盟约」同人网页游戏）v0.2.6
 **补丁文件 / Patch file：** `apply-font-patch.mjs`
 
 > 每段中文后面的引用块是英文对照 / The quoted block after each Chinese paragraph is its English version.
@@ -10,9 +10,9 @@
 
 ## 一、这个补丁是干什么的？ / What does this patch do?
 
-一句话：**只改好看，不改好玩。** 它把战斗中飘出的伤害数字彻底翻新——字体、颜色、大小、出现位置、飘动快慢都可以自己调，而且所有调整都在游戏设置里点选完成，不需要再碰任何文件。游戏的规则、数值、玩法完全不受影响。
+把战斗中飘出的伤害数字彻底翻新——字体、颜色、大小、出现位置、飘动快慢都可以自己调，而且所有调整都在游戏设置里点选完成，不需要再碰任何文件。游戏的规则、数值、玩法完全不受影响。
 
-> In one sentence: **it changes how the game looks, not how it plays.** This patch gives the floating damage numbers in battle a full makeover — font, colors, size, position and floating speed are all adjustable, and everything is done inside the game's settings menu. No game rules or balance numbers are touched.
+> This patch gives the floating damage numbers in battle a full makeover — font, colors, size, position and floating speed are all adjustable, and everything is done inside the game's settings menu. No game rules or balance numbers are touched.
 
 ---
 
@@ -36,13 +36,13 @@
 
 ### 3. 一块新的「高级微调」设置面板 / A new "Fine-Tuning" settings panel
 
-在游戏设置里新增，点「展开」即可使用。**无论当前选的是哪个风格预设，展开后的面板完全相同**；只要调整了其中任何一项，顶部的风格就会自动变成「自定义」：
+在游戏设置里新增，点「展开」即可使用。只要调整了其中任何一项，顶部的风格就会自动变成「自定义」：
 
 - 整体字号、治疗数字的缩小比例 / Overall number size, heal-number size ratio
-- 「官方数字行为」总开关：开 = 数字走官方管线（头顶居中・快速上浮消失，见第 6 节）；关 = 走原版跳字管线 / An "Official Number Behavior" master switch: on = the official popup pipeline (§6), off = the classic one
-- 数字出现的高度、左右抖动范围、上浮速度——**两条管线都生效**，高度同时也控制官方风格的 SP / COST 弹字（官方还原的出厂值 = 官方表现：头顶高度 100%、抖动 0、速度 100%）/ Spawn height, horizontal jitter, floating speed — effective in BOTH pipelines, and the height also drives the Authentic-style SP / COST popups (the Authentic preset's factory values equal the official look)
-- 同一个目标最多同时显示几个数字，最高档 **∞ 无上限**（官方还原的出厂值）/ Max numbers per target, top step **∞ unlimited** (the Authentic preset's factory value)
-- 数字合并相加、互相避让，各自可开关（同样两条管线都生效；官方还原出厂为全关）/ Merge numbers / dodge overlaps, each toggleable (both pipelines; off by default in the Authentic preset)
+- 「官方数字行为」总开关：点亮 = 数字走官方管线（见第 6 节）且高度 / 抖动 / 上浮速度 / 同目标上限 / 合并 / 避让六项全在官方出厂值——点亮时点击会关闭开关、回到原版跳字管线并把六项恢复原版默认；六项一旦偏离出厂值，开关会自动熄灭，但**数字仍走官方管线**、所见即所得，再点开关即恢复官方出厂值 / An "Official Number Behavior" switch: lit = the official pipeline (§6) with the six behavior knobs (height / jitter / rise / cap / merge / dodge) all at the official factory values — clicking it while lit switches to the classic pipeline and restores the author's defaults. If any of the six deviates, the switch dims automatically, but **the numbers stay on the official pipeline** (what you see is what you get); clicking it again snaps all six back to the official factory values
+- 数字出现的高度、左右抖动范围（以「格」计，与原版同单位）、上浮速度——两条管线里都自由生效，高度同时也控制官方风格的 SP / COST 弹字 / Spawn height, horizontal jitter (in tiles, the author's own unit), floating speed — free to tune in both pipelines, and the height also drives the Authentic-style SP / COST popups
+- 同一个目标最多同时显示几个数字，最高档 **∞ 无上限**（官方出厂值）/ Max numbers per target, top step **∞ unlimited** (the official factory value)
+- 数字合并相加、互相避让，各自可开关（官方出厂为全关）/ Merge numbers / dodge overlaps, each toggleable (off at the official factory settings)
 - 暴击入场动画（快速放大→缩小）开关，作用于官方数字行为下的暴击 / Crit pop-in toggle — crits under Official Number Behavior
 - 暴击大字、暴击加粗，各自可开关 / Big crit numbers, bold crit numbers, each toggleable
 - 暴击判定方式四选一：官方暴击比例 / 单发伤害≥目标生命的 18% / 满足任意一条 / 仅放大显示 / Four crit trigger options: official crit ratio · single hit ≥ 18% of target HP · either one · enlarge only
@@ -57,7 +57,7 @@
 - **按钮关闭（默认）：** 所有费用变动都弹字——回费是金色 `COST 10`（#E0A32C），扣费是红色 `COST −5`（#D4121A，含行商特性扣费、个别干员的特性 / 复活类扣费）；技力方面，只有天赋、技能描述、盟约等**明确写出的回复手段**弹青色 `SP 1`（#6FC6D2），时间流逝、攻击、受击的自然回复不弹字，与官方一致。
 - **按钮开启（完全对齐官方本尊）：** 费用只弹冲锋手、情报官等**跟随攻击的回费**和**行商扣费**，技能型回费不再弹字；技力规则不变。
 
-弹字使用专用白色小字体染色，颜色精确，字号与治疗数字相当，并跟随「高级微调」里的整体字号滑块。弹字位置与官方伤害数字一致：挂在单位头顶上方（同样随模型身高取等比、跟随「高度」滑块），不再贴在胸口；非官方风格的 `+N` 回费弹字仍在原位置。
+弹字使用专用白色小字体染色，颜色精确，字号与治疗数字相当，并跟随「高级微调」里的整体字号滑块。弹字位置与官方伤害数字一致：挂在单位头顶正中央上方（同样随模型身高取等比、跟随「高度」滑块；与治疗数字一样，这类小字的间距取常规数字的 0.9 倍、稍低），不再贴在胸口、也不再有向右的偏移；非官方风格的 `+N` 回费弹字仍在原位置。
 
 > **These popups appear only in the "Authentic" style; every other style keeps the game's original look.** No animations are changed — text only.
 >
@@ -66,7 +66,7 @@
 > - **Button off (default):** every DP change pops text — gains in gold `COST 10` (#E0A32C), spends in red `COST −5` (#D4121A: the Merchant trait's pays and a few operators' trait / revive-style costs). For SP, only sources explicitly described in talents / skill texts / bonds pop a cyan `SP 1` (#6FC6D2); natural recovery (time, attacking, being hit) shows nothing, same as official.
 > - **Button on (fully matches the official game):** DP only pops for attack-followed gains (Charger / Agent kills) and Merchant spends — skill-based gains no longer show text; SP rules unchanged.
 >
-> The popups use a dedicated small white font tinted to exact colors, sized like heal numbers, following the overall size slider in "Fine-Tuning". They sit where the official damage numbers sit — above the unit's head, proportionally to the model's height and following the height slider — instead of at the chest; the non-Authentic `+N` cost label keeps its original spot.
+> The popups use a dedicated small white font tinted to exact colors, sized like heal numbers (heals were bumped to match them exactly), following the overall size slider in "Fine-Tuning". They sit where the official damage numbers sit — dead-center above the unit's head, proportionally to the model's height and following the height slider, at 0.9× the regular gap like heals — instead of at the chest, with no rightward offset anymore; the non-Authentic `+N` cost label keeps its original spot.
 
 ### 5. 官方规则的红字（暴击）判定 / Official-rule red numbers (crits)
 
@@ -89,9 +89,9 @@
 
 「官方还原」在保留同人「普攻就有数字」这一特点的前提下，弹字行为全面对齐官方本尊；**「原版经典」在出厂设置下原封不动保留作者的全部原有样式**（数字合并、左右抖动、同目标数量上限、头高 80% 处的锚点等照旧——微调滑块同样可以在它身上偏离作者原样）。
 
-- **头顶正中央、更高，且随敌人体型等比**：数字出现在干员 / 敌人头顶正中央的高处，头顶间距按模型身高取等比——每个模型的间距都约为自身身高的 0.85 倍（干员约 1 格不变，1 格即战术地砖一格的边长；矮敌不会被顶到半空、高敌也不会贴着头），出厂不左右抖动，也不再贴在模型身上。治疗数字与官方风格的 SP / COST 弹字用的也是这同一套定位。
+- **头顶正中央、更高，且随敌人体型等比**：数字出现在干员 / 敌人头顶正中央的高处，头顶间距按模型身高取等比——每个模型的间距都约为自身身高的 0.85 倍（干员约 1 格不变，1 格即战术地砖一格的边长；矮敌不会被顶到半空、高敌也不会贴着头），出厂不左右抖动，也不再贴在模型身上。治疗数字与官方风格的 SP / COST 弹字用的也是这同一套定位，只是这三类小字的间距为常规数字的 0.9 倍、稍低一些，字号也与 SP / COST 一致。
 - **迅速上浮、迅速消失**：0.3 秒完成上浮，一共存活 0.6 秒、末尾 0.18 秒淡出——官方的快节奏。
-- **出厂不合并、无上限、不避让**：每一击都是独立数字，同屏数量不设上限。注意这些现在是「出厂值」而非硬规则——「高级微调」里的合并 / 避让 / 同目标上限（最高档 ∞）/ 抖动 / 高度 / 上浮速度滑块在官方管线上同样生效，想偏离官方表现直接调即可（模式会自动变为「自定义」）。避让的表现：官方管线上新数字向上叠放、不横移（保持居中）；原版管线则是作者原版的五车道让位（横向让开 + 纵向叠放）。
+- **出厂不合并、无上限、不避让**：每一击都是独立数字，同屏数量不设上限。这六项（合并 / 避让 / 同目标上限最高档 ∞ / 抖动 / 高度 / 上浮速度）可以随意调、官方管线上同样生效；一旦偏离官方出厂值，「官方数字行为」开关会自动熄灭作标记（数字仍走官方管线、不会被拽回原版），再点开关即恢复官方出厂值。避让的表现：官方管线上新数字向上叠放、不横移（保持居中）；原版管线则是作者原版的五车道让位（横向让开 + 纵向叠放）。
 - **暴击仍加大加粗**：官方还原下暴击（红字机制命中）与原路径一致——加大、加粗、伤害类型色（「暴击加粗」开关照常有效）；只有开启「仅显示官方数字」后，红字才变成官方的不加粗 #E34C25 纯色（此时除红字机制外的一切伤害数字也全部隐藏）。
 - **暴击入场动画（可开关）**：官方数字行为下的**暴击**数字出现时会快速放大再迅速缩小回落（约 0.17 秒，峰值 +50%）——红字（开「仅显示官方数字」时）和加大加粗两档都有，正是官方红字的登场感。「暴击入场动画」开关默认开启。普攻、技能、治疗、MISS 的数字以及关闭官方数字行为后的跳字完全不受影响，一律保持原有节奏。
 - 本可红字的攻击被闪避时的黄色 MISS 也走同一套官方弹字。
@@ -99,9 +99,9 @@
 
 > Within the Authentic style — while keeping the fan game's trait that normal attacks also show numbers — popups now fully match the official game's behavior; **the Classic style, at its factory settings, keeps every one of the author's original behaviors** (merging, jitter, per-target caps, the anchor at 80% of head height — all unchanged, and the Fine-Tuning sliders can deviate from the author's look there too).
 >
-> - **Head-top centered, higher, scaled to the enemy's size**: numbers appear centered high above a unit's head, with the gap proportional to the model's height — roughly 0.85× its own body height for every model (~1 tile for operators, unchanged; a tile is one tactical grid cell — short enemies no longer send numbers into the sky, tall ones no longer keep them glued to the head) — no factory jitter, no longer printed on the model's body. Heals and the Authentic-style SP / COST popups use this same positioning.
+> - **Head-top centered, higher, scaled to the enemy's size**: numbers appear centered high above a unit's head, with the gap proportional to the model's height — roughly 0.85× its own body height for every model (~1 tile for operators, unchanged; a tile is one tactical grid cell — short enemies no longer send numbers into the sky, tall ones no longer keep them glued to the head) — no factory jitter, no longer printed on the model's body. Heals and the Authentic-style SP / COST popups use this same positioning, except these three small labels sit at 0.9× the regular gap (slightly lower) and heals are sized to match SP / COST.
 > - **Quick rise, quick fade**: rise completes in 0.3 s, total life 0.6 s with a 0.18 s fade-out — the official pace.
-> - **Factory: no merging, no cap, no dodging**: every hit is its own number, no on-screen limit. These are factory values, not hard rules — the Fine-Tuning sliders (merge / dodge / per-target cap with a ∞ top step / jitter / height / rise speed) drive the official pipeline too; deviate freely (the style flips to Custom). Dodge behavior: in the official pipeline a new number stacks upward without moving sideways (stays centered); in the classic pipeline it is the author's original five-lane dodging (sideways + upward).
+> - **Factory: no merging, no cap, no dodging**: every hit is its own number, no on-screen limit. These six knobs (merge / dodge / per-target cap with a ∞ top step / jitter / height / rise speed) can be tuned freely and drive the official pipeline too; once any of them deviates, the "Official Number Behavior" switch dims as a marker (the numbers stay on the official pipeline — they are not yanked back to the classic one), and clicking the switch snaps all six back to the official factory values. Dodge behavior: in the official pipeline a new number stacks upward without moving sideways (stays centered); in the classic pipeline it is the author's original five-lane dodging (sideways + upward).
 > - **Crits stay big & bold**: a crit-mechanism hit keeps the previous treatment — enlarged, bold, in the damage type's color (the "Crit Bold" toggle applies as usual); only with "Official Numbers Only" on does the red become the official non-bold #E34C25 (and everything except red-mechanism numbers hides entirely).
 > - **Crit pop-in (toggleable)**: under Official Number Behavior, **crit** numbers quickly enlarge then shrink back on arrival (~0.17 s, +50% peak) — both tiers, the non-bold red (with "Official Numbers Only" on) and the big-bold one, exactly how official red numbers pop in. A "Crit Pop-in" toggle defaults to on. Normal attacks, skills, heals, MISS — and numbers with the behavior off — are completely unaffected and keep their original pacing.
 > - Yellow MISS popups (a would-be-red hit dodged) use the same official behavior.
