@@ -218,13 +218,13 @@ function officialExpectedAmount(dmg, type, ts, target, source) {
 ]);
 
 // =========================================================================
-// 4. public/js/render/app.js: 适配 dmg 事件分发（透传 ratioCrit 与 hpCrit），含 v0.2.6 新增的 ammoCount 设置
+// 4. public/js/render/app.js: 适配 dmg 事件分发（透传 ratioCrit 与 hpCrit），含 v0.3.1 上游的 officialFx / noSpark 与 ammoEnergyCount 设置
 // =========================================================================
 applyPatchToFile('public/js/render/app.js', [
   // 默认开启官方还原数字行为（默认预设即「官方还原」；设置推送会覆盖）
   [
-    `  const settings = { damageNumbers: true, officialDamageNumbers: false, ammoCount: false, quality: 'high', ...(opts.settings || {}) };`,
-    `  const settings = { damageNumbers: true, officialDamageNumbers: false, authenticNums: true, ammoCount: false, quality: 'high', ...(opts.settings || {}) };`
+    `  const settings = { damageNumbers: true, officialDamageNumbers: false, ammoEnergyCount: false, quality: 'high', officialFx: 'auto', ...(opts.settings || {}) };`,
+    `  const settings = { damageNumbers: true, officialDamageNumbers: false, authenticNums: true, ammoEnergyCount: false, quality: 'high', officialFx: 'auto', ...(opts.settings || {}) };`
   ],
   [
     `      case 'dmg': {
@@ -234,7 +234,9 @@ applyPatchToFile('public/js/render/app.js', [
         const m = meleePending.get(v.id);
         let src = null;
         if (m && now - m.t < 0.35) { src = m.src; meleePending.delete(v.id); fx._slashAt = src.id; }
-        fx.damage(v, amt, e[3], src, e[4]);
+        // an official hit drawn for this damage replaces the procedural spark / slash (the numbers stay)
+        const official = pluginFx.hit(src, v) || wiring.damage(v, e[3], src, now);
+        fx.damage(v, amt, e[3], src, e[4], official ? NO_SPARK : undefined);
         break;
       }`,
     `      case 'dmg': {
@@ -244,7 +246,9 @@ applyPatchToFile('public/js/render/app.js', [
         const m = meleePending.get(v.id);
         let src = null;
         if (m && now - m.t < 0.35) { src = m.src; meleePending.delete(v.id); fx._slashAt = src.id; }
-        fx.damage(v, amt, e[3], src, e[4], e[5], e[6]);
+        // an official hit drawn for this damage replaces the procedural spark / slash (the numbers stay)
+        const official = pluginFx.hit(src, v) || wiring.damage(v, e[3], src, now);
+        fx.damage(v, amt, e[3], src, e[4], official ? NO_SPARK : undefined, e[5]);   // e[5]='hp' 18% 血量暴击标记（补丁扩展的元组）
         break;
       }`
   ],
@@ -254,8 +258,15 @@ applyPatchToFile('public/js/render/app.js', [
       const q = settings.quality;
       if (typeof s.damageNumbers === 'boolean') settings.damageNumbers = s.damageNumbers;
       if (typeof s.officialDamageNumbers === 'boolean') settings.officialDamageNumbers = s.officialDamageNumbers;
-      if (typeof s.ammoCount === 'boolean') settings.ammoCount = s.ammoCount;   // the units read it every frame (ctx.settings)
+      if (typeof s.ammoEnergyCount === 'boolean') settings.ammoEnergyCount = s.ammoEnergyCount; // the units read it every frame (ctx.settings)
+      // 设置「显示其他玩家的皮肤」 (docs/SKINS.md): the views already up keep the appearance they were built on, so the
+      // ones the new choice changes are dropped and rebuilt from their own info on the next frame
+      if (typeof s.otherSkins === 'boolean' && s.otherSkins !== settings.otherSkins) {
+        settings.otherSkins = s.otherSkins;
+        refreshSkins();
+      }
       if (s.quality === 'high' || s.quality === 'medium' || s.quality === 'low') settings.quality = s.quality;
+      if (typeof s.officialFx === 'string' && s.officialFx !== settings.officialFx) { settings.officialFx = s.officialFx; syncOfficialFx(); }
       if (q !== settings.quality) { board3d?.setQuality?.(settings.quality); resize(); }
     },`,
     `    setSettings(s) {
@@ -264,8 +275,15 @@ applyPatchToFile('public/js/render/app.js', [
       if (typeof s.damageNumbers === 'boolean') settings.damageNumbers = s.damageNumbers;
       if (typeof s.officialDamageNumbers === 'boolean') settings.officialDamageNumbers = s.officialDamageNumbers;
       if (typeof s.authenticNums === 'boolean') settings.authenticNums = s.authenticNums;   // 官方还原数字行为（头顶居中/不合并/无上限）
-      if (typeof s.ammoCount === 'boolean') settings.ammoCount = s.ammoCount;   // the units read it every frame (ctx.settings)
+      if (typeof s.ammoEnergyCount === 'boolean') settings.ammoEnergyCount = s.ammoEnergyCount; // the units read it every frame (ctx.settings)
+      // 设置「显示其他玩家的皮肤」 (docs/SKINS.md): the views already up keep the appearance they were built on, so the
+      // ones the new choice changes are dropped and rebuilt from their own info on the next frame
+      if (typeof s.otherSkins === 'boolean' && s.otherSkins !== settings.otherSkins) {
+        settings.otherSkins = s.otherSkins;
+        refreshSkins();
+      }
       if (s.quality === 'high' || s.quality === 'medium' || s.quality === 'low') settings.quality = s.quality;
+      if (typeof s.officialFx === 'string' && s.officialFx !== settings.officialFx) { settings.officialFx = s.officialFx; syncOfficialFx(); }
       if (q !== settings.quality) { board3d?.setQuality?.(settings.quality); resize(); }
       Object.assign(settings, s);
     },`
@@ -533,16 +551,17 @@ applyPatchToFile('public/js/render/fx/numbers.js', [
   return clamp(s / 115, 0.42, 1.05) * baseMult * (big ? 1.35 : 1) * (style === 'heal' || style === 'miss' ? healRatio : 1);   // MISS 同小字字号（与 SP/COST 一样大）
 };`
   ],
-  // 1. 拦截 dmg 签名与触发条件
+  // 1. 拦截 dmg 签名与触发条件（v0.3.1 上游给 damage() 加了第 6 参 o.noSpark——官方特效已画过命中时跳过程序化火花；
+  //    补丁的 hpMark 顺延为第 7 参，app.js 调用点同步传 e[5]）
   [
-    `  damage(view, amount, type, srcView, mark) {
+    `  damage(view, amount, type, srcView, mark, o) {
     if (!view) return;
     const style = dmgStyleKey(type);
     const p = this._chest(view);
     const px = p.x, py = p.y, s = p.s;
     const tint = HIT_TINT[style] || 0xffffff;
     const big = view.maxHp > 0 && amount >= view.maxHp * 0.18;`,
-    `  damage(view, amount, type, srcView, mark, hpMark) {
+    `  damage(view, amount, type, srcView, mark, o, hpMark) {
     if (!view) return;
     const style = dmgStyleKey(type);
     const p = this._chest(view);
@@ -1222,12 +1241,14 @@ export const settingsStore = createStore({
   savePref('settings', sanitizeSettings(s));
   audio.setVolumes(s);
   audio.setVoiceLang(s.voiceLang, s.voiceOverrides);
+  audio.setVoiceNative(s.voiceNative);
   applyTextSize(s.textSize);
 });`,
     `settingsStore.subscribe((s) => {
   savePref('settings', s);
   audio.setVolumes(s);
   audio.setVoiceLang(s.voiceLang, s.voiceOverrides);
+  audio.setVoiceNative(s.voiceNative);
   applyTextSize(s.textSize);
   applyFontFamily(s.uiFont || s.fontFamily);
 });`
@@ -1256,8 +1277,8 @@ export function applyFontFamily(f) {
 applyFontFamily(settingsStore.get().uiFont || settingsStore.get().fontFamily);`
   ],
   [
-    "const QUALITY = [['high', N_('高')], ['medium', N_('中')], ['low', N_('低')]];",
-    `const QUALITY = [['high', N_('高')], ['medium', N_('中')], ['low', N_('低')]];
+    "const QUALITY = [['low', N_('低')], ['medium', N_('中')], ['high', N_('高')]];",
+    `const QUALITY = [['low', N_('低')], ['medium', N_('中')], ['high', N_('高')]];
 const PRESET_MODES = [
   ['original', '原版经典'],
   ['authentic', '官方还原'],
@@ -1773,5 +1794,5 @@ applyPatchToFile('server/sim/content/kits/ops/chess_char_6_01-lemuen.js', [
 if (isRestore) {
   console.log('所有文件已彻底还原回原版！');
 } else {
-  console.log('v0.2.6 个性化功能补丁已应用完成！随时可通过 node apply-font-patch.mjs --restore 一键还原。');
+  console.log('v0.3.1 个性化功能补丁已应用完成！随时可通过 node apply-font-patch.mjs --restore 一键还原。');
 }
