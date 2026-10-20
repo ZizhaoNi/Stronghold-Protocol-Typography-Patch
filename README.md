@@ -1,7 +1,7 @@
 # 《卫戍协议》伤害数字美化补丁 · 使用说明
 # Stronghold Protocol Damage-Number Patch · User Guide
 
-**适用游戏 / For：** Stronghold Protocol（明日方舟「卫戍协议：盟约」同人网页游戏）v0.2.6
+**适用游戏 / For：** Stronghold Protocol（明日方舟「卫戍协议：盟约」同人网页游戏）v0.3.1
 **补丁文件 / Patch file：** `apply-font-patch.mjs`
 
 > 每段中文后面的引用块是英文对照 / The quoted block after each Chinese paragraph is its English version.
@@ -57,7 +57,7 @@
 - **按钮关闭（默认）：** 所有费用变动都弹字——回费是金色 `COST 10`（#E0A32C），扣费是红色 `COST −5`（#D4121A，含行商特性扣费、个别干员的特性 / 复活类扣费）；技力方面，只有天赋、技能描述、盟约等**明确写出的回复手段**弹青色 `SP 1`（#6FC6D2），时间流逝、攻击、受击的自然回复不弹字，与官方一致。
 - **按钮开启（完全对齐官方本尊）：** 费用只弹冲锋手、情报官等**跟随攻击的回费**和**行商扣费**，技能型回费不再弹字；技力规则不变。
 
-弹字使用专用白色小字体染色，颜色精确，字号与治疗数字相当，并跟随「高级微调」里的整体字号滑块。弹字位置与官方伤害数字一致：挂在单位头顶正中央上方（同样随模型身高取等比、跟随「高度」滑块；与治疗数字一样，这类小字的间距取常规数字的 0.9 倍、稍低），不再贴在胸口、也不再有向右的偏移；非官方风格的 `+N` 回费弹字仍在原位置。
+弹字使用专用白色小字体染色，颜色精确，字号与治疗数字相当，并跟随「高级微调」里的整体字号滑块。弹字位置与官方伤害数字一致：挂在单位头顶正中央上方（同样随模型身高取等比、跟随「高度」滑块；与治疗数字一样，这类小字的间距取常规数字的 0.8 倍、稍低），不再贴在胸口、也不再有向右的偏移；非官方风格的 `+N` 回费弹字仍在原位置。
 
 > **These popups appear only in the "Authentic" style; every other style keeps the game's original look.** No animations are changed — text only.
 >
@@ -66,7 +66,7 @@
 > - **Button off (default):** every DP change pops text — gains in gold `COST 10` (#E0A32C), spends in red `COST −5` (#D4121A: the Merchant trait's pays and a few operators' trait / revive-style costs). For SP, only sources explicitly described in talents / skill texts / bonds pop a cyan `SP 1` (#6FC6D2); natural recovery (time, attacking, being hit) shows nothing, same as official.
 > - **Button on (fully matches the official game):** DP only pops for attack-followed gains (Charger / Agent kills) and Merchant spends — skill-based gains no longer show text; SP rules unchanged.
 >
-> The popups use a dedicated small white font tinted to exact colors, sized like heal numbers (heals were bumped to match them exactly), following the overall size slider in "Fine-Tuning". They sit where the official damage numbers sit — dead-center above the unit's head, proportionally to the model's height and following the height slider, at 0.9× the regular gap like heals — instead of at the chest, with no rightward offset anymore; the non-Authentic `+N` cost label keeps its original spot.
+> The popups use a dedicated small white font tinted to exact colors, sized like heal numbers (heals were bumped to match them exactly), following the overall size slider in "Fine-Tuning". They sit where the official damage numbers sit — dead-center above the unit's head, proportionally to the model's height and following the height slider, at 0.8× the regular gap like heals — instead of at the chest, with no rightward offset anymore; the non-Authentic `+N` cost label keeps its original spot.
 
 ### 5. 官方规则的红字（暴击）判定 / Official-rule red numbers (crits)
 
@@ -89,7 +89,7 @@
 
 「官方还原」在保留同人「普攻就有数字」这一特点的前提下，弹字行为全面对齐官方本尊；**「原版经典」在出厂设置下原封不动保留作者的全部原有样式**（数字合并、左右抖动、同目标数量上限、头高 80% 处的锚点等照旧——微调滑块同样可以在它身上偏离作者原样）。
 
-- **头顶正中央、更高，且随敌人体型等比**：数字出现在干员 / 敌人头顶正中央的高处，头顶间距按模型身高取等比——每个模型的间距都约为自身身高的 0.85 倍（干员约 1 格不变，1 格即战术地砖一格的边长；矮敌不会被顶到半空、高敌也不会贴着头），出厂不左右抖动，也不再贴在模型身上。治疗数字与官方风格的 SP / COST 弹字用的也是这同一套定位，只是这三类小字的间距为常规数字的 0.9 倍、稍低一些，字号也与 SP / COST 一致。
+- **头顶正中央，全棋盘逐排一致**：模型是直立立绘，头顶就取立绘画出的头顶，数字底边悬在头顶上方一小段固定间距，并按模型身高取等比（矮敌不会被顶到半空、高敌也不会贴着头）。间距以画布上的真实「格」计量（1 格即战术地砖一格在画布上的边长），因此近处几排与最上几排观感完全一致——旧的世界坐标换算会让同一间距在近处被压扁、在远处被拉长。出厂不左右抖动，也不再贴在模型身上。治疗数字、黄色 MISS 与官方风格的 SP / COST 弹字用的也是这同一套定位，只是这几类小字的间距为常规数字的 0.8 倍、稍低一些，字号也与 SP / COST 一致（MISS 同大）；治疗数字前同样带 `+` 号（与原版经典管线一致）。
 - **迅速上浮、迅速消失**：0.3 秒完成上浮，一共存活 0.6 秒、末尾 0.18 秒淡出——官方的快节奏。
 - **出厂不合并、无上限、不避让**：每一击都是独立数字，同屏数量不设上限。这六项（合并 / 避让 / 同目标上限最高档 ∞ / 抖动 / 高度 / 上浮速度）可以随意调、官方管线上同样生效；一旦偏离官方出厂值，「官方数字行为」开关会自动熄灭作标记（数字仍走官方管线、不会被拽回原版），再点开关即恢复官方出厂值。避让的表现：官方管线上新数字向上叠放、不横移（保持居中）；原版管线则是作者原版的五车道让位（横向让开 + 纵向叠放）。
 - **暴击仍加大加粗**：官方还原下暴击（红字机制命中）与原路径一致——加大、加粗、伤害类型色（「暴击加粗」开关照常有效）；只有开启「仅显示官方数字」后，红字才变成官方的不加粗 #E34C25 纯色（此时除红字机制外的一切伤害数字也全部隐藏）。
@@ -99,7 +99,7 @@
 
 > Within the Authentic style — while keeping the fan game's trait that normal attacks also show numbers — popups now fully match the official game's behavior; **the Classic style, at its factory settings, keeps every one of the author's original behaviors** (merging, jitter, per-target caps, the anchor at 80% of head height — all unchanged, and the Fine-Tuning sliders can deviate from the author's look there too).
 >
-> - **Head-top centered, higher, scaled to the enemy's size**: numbers appear centered high above a unit's head, with the gap proportional to the model's height — roughly 0.85× its own body height for every model (~1 tile for operators, unchanged; a tile is one tactical grid cell — short enemies no longer send numbers into the sky, tall ones no longer keep them glued to the head) — no factory jitter, no longer printed on the model's body. Heals and the Authentic-style SP / COST popups use this same positioning, except these three small labels sit at 0.9× the regular gap (slightly lower) and heals are sized to match SP / COST.
+> - **Head-top centered, uniform across every board row**: the models are upright billboards, so the head top is the sprite's drawn head; a number's bottom edge hangs a small fixed gap above it, scaled to the model's height (short enemies no longer send numbers into the sky, tall ones no longer keep them glued to the head). The gap is measured in true on-screen tiles (one tile = a tactical grid cell's on-screen edge), so the near rows and the top rows read identically — the old world-space conversion squeezed the same gap flat near the camera and stretched it far away. No factory jitter, no longer printed on the model's body. Heals, the yellow MISS and the Authentic-style SP / COST popups use this same positioning, except these small labels sit at 0.8× the regular gap, slightly lower, and are sized to match SP / COST (MISS included); heals carry the `+` sign like the classic pipeline.
 > - **Quick rise, quick fade**: rise completes in 0.3 s, total life 0.6 s with a 0.18 s fade-out — the official pace.
 > - **Factory: no merging, no cap, no dodging**: every hit is its own number, no on-screen limit. These six knobs (merge / dodge / per-target cap with a ∞ top step / jitter / height / rise speed) can be tuned freely and drive the official pipeline too; once any of them deviates, the "Official Number Behavior" switch dims as a marker (the numbers stay on the official pipeline — they are not yanked back to the classic one), and clicking the switch snaps all six back to the official factory values. Dodge behavior: in the official pipeline a new number stacks upward without moving sideways (stays centered); in the classic pipeline it is the author's original five-lane dodging (sideways + upward).
 > - **Crits stay big & bold**: a crit-mechanism hit keeps the previous treatment — enlarged, bold, in the damage type's color (the "Crit Bold" toggle applies as usual); only with "Official Numbers Only" on does the red become the official non-bold #E34C25 (and everything except red-mechanism numbers hides entirely).
@@ -112,16 +112,17 @@
 - 界面上的数字字体也能跟随切换（Novecento、Bender、Rodin、Skurri、Oxanium、Rajdhani、系统默认）/ The UI number font can be switched too.
 - 新增的所有选项会自动跟随游戏语言显示：简体中文、繁体中文、English、日本語、한국어 / All new options auto-translate with the game's language.
 - 顺带微调了六角数值徽章和商店等级卡片，让它们在新字体下显示得更居中 / Hex badges and shop level cards were slightly adjusted to sit centered under the new fonts.
+- v0.3.1 游戏自带了「官方特效」（官方命中等特效）。它和本补丁互不干扰：特效照常播放，数字仍由本补丁的管线负责 / The v0.3.1 game ships its own official hit effects. They don't conflict with this patch — effects play as usual, numbers still come from this patch's pipeline.
 
 ---
 
 ## 三、使用前的两个条件 / Two things you need first
 
 1. **电脑上装了 Node.js。** 运行这个游戏本身就需要它。没装的话，去 [nodejs.org](https://nodejs.org) 下载 LTS 版本，一路「下一步」装完即可。
-2. **游戏版本是 v0.2.6.1。** 游戏更新后内部文件会变，补丁可能找不到要改的位置（它会明确提示是哪一步），那时需要等补丁更新后再用。
+2. **游戏版本是 v0.3.1。** 游戏更新后内部文件会变，补丁可能找不到要改的位置（它会明确提示是哪一步）。用游戏自带的更新功能升级后，被补丁改过的文件会被更新覆盖，重新运行一遍补丁即可。
 
 > 1. **Node.js installed.** You already need it to run the game. If not, download the LTS version from [nodejs.org](https://nodejs.org) and install with defaults.
-> 2. **Game version v0.2.6.1.** After a game update the patch may no longer find what to change — it will tell you clearly when that happens.
+> 2. **Game version v0.3.1.** After a game update the patch may no longer find what to change — it will tell you clearly. Updating the game through its own updater overwrites the patched files; just run the patch again afterwards.
 
 ---
 
@@ -166,14 +167,14 @@ node apply-font-patch.mjs --restore
 - 第一次打补丁时，每个被修改的文件都会自动留一份备份（原文件名后加 `.bak`）。
 - 重复运行补丁不会「越打越乱」：每次都是从最初备份的原始文件重新改起。
 - 还原命令会把备份写回原文件并删掉备份，干干净净。
-- 两款新字体（FOT-Rodin、Skurri）已经放在游戏的 `public/fonts` 文件夹里，**无需另外下载**。
+- 两款新字体（FOT-Rodin、Skurri）已经放在游戏的 `public/fonts` 文件夹里，**无需另外下载**。换到新的游戏文件夹时，记得把这两个字体文件也一起拷过去，只复制补丁脚本是不够的。
 - 补丁会改动服务器一侧的文件，所以打完补丁要**重新启动游戏**（关掉黑色命令行窗口再按平时方式启动）才能看到行商、冲锋手等新弹字；页面再按 `Ctrl + F5` 强制刷新。
 
 > - Only 26 game files are modified; nothing is deleted and nothing goes online.
 > - On first run, every modified file gets an automatic backup copy (same name + `.bak`).
 > - Running the patch again never stacks up changes — it always starts over from the original backup.
 > - The restore command writes the backups back and removes them.
-> - The two new fonts (FOT-Rodin, Skurri) already ship in `public/fonts` — **nothing to download**.
+> - The two new fonts (FOT-Rodin, Skurri) already sit in the game's `public/fonts` folder — **nothing to download**. When moving to a fresh game folder, copy the font files over too; the patch script alone is not enough.
 > - Some patched files live on the server side, so **restart the game** (close the black command window, launch as usual) after patching to see the new Merchant / Charger popups; then hard-refresh with `Ctrl + F5`.
 
 修改文件清单（仅供留档）/ List of modified files (for the record)：
@@ -220,7 +221,7 @@ node apply-font-patch.mjs --restore
 ## 八、常见问题 / FAQ
 
 **Q1：运行时提示「未匹配到目标代码」？**
-游戏版本和补丁对不上。确认游戏是 v0.2.6.1；如果是更新的游戏版本，请等补丁更新。
+游戏版本和补丁对不上。确认游戏是 v0.3.1；如果是更新的游戏版本，请等补丁更新。
 
 **Q2：改了设置没反应？**
 先按 `Ctrl + F5` 强制刷新页面；数字样式的差异开一局新战斗看得最清楚。
@@ -234,11 +235,19 @@ node apply-font-patch.mjs --restore
 **Q5：我之前版本里选过的风格叫「官方 / 战术 / 极简」，现在找不到了？**
 它们只是改了名字——现在分别叫「官方还原 / 属性风暴 / 街机硬派」。旧存档会自动迁移到对应的新风格，你调整过的颜色、字号等个人设置全部保留，不需要重调。
 
-> **Q1: "Target code not found" warning?** The game version doesn't match the patch. Make sure the game is v0.2.6.1; for a newer game, wait for an updated patch.
+**Q6：联机一起玩时，别人也需要打补丁吗？**
+不需要。大家连的是房主开的服务器，页面和战斗演算都由它提供：房主打好补丁、重启游戏，其他玩家直接加入就能看到同样的弹字，各自浏览器里的个人设置互不影响。
+
+**Q7：用游戏自带的更新功能升级后，补丁还在吗？**
+不在了。更新器会把改过的文件恢复成官方版本，更新完重新运行一遍补丁、再重启游戏即可（字体文件不受影响，不用重新拷）。
+
+> **Q1: "Target code not found" warning?** The game version doesn't match the patch. Make sure the game is v0.3.1; for a newer game, wait for an updated patch.
 > **Q2: Settings not taking effect?** Hard-refresh with `Ctrl + F5` first; start a new battle to see number-style changes clearly.
 > **Q3: Where are my colors and sizes saved?** In your browser. They survive normal restarts, but clearing browser data, switching browsers or computers means setting them again. Restoring the patch does not touch these personal settings.
 > **Q4: Do I need to back up before re-patching after a restore?** No — the patch handles backups itself every time. Just run it.
 > **Q5: My old build had styles named "Official / Tactical / Minimal" — where did they go?** They were only renamed — to "Authentic / Elemental / Arcade" respectively. Saved choices migrate automatically, and all your personal color / size settings are kept.
+> **Q6: In multiplayer, does everyone need the patch?** No. Everyone connects to the host's server, which serves both the page and the battle simulation. With the host patched and the game restarted, joining players see the same popups; each player's own browser settings are unaffected.
+> **Q7: Does the patch survive the game's built-in updater?** No. The updater restores changed files to the official versions. After updating, run the patch once more and restart the game (the font files are untouched — no need to copy them again).
 
 ---
 
